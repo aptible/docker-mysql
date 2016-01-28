@@ -3,7 +3,7 @@ FROM quay.io/aptible/debian:wheezy
 # cf. docker-library/mysql: explicitly create the user so uid and gid are consistent.
 RUN groupadd -r mysql && useradd -r -g mysql mysql
 
-ENV MYSQL_VERSION 5.6.26-1debian7
+ENV MYSQL_VERSION 5.6.28-1debian7
 ADD templates/etc/apt/sources.list.d /etc/apt/sources.list.d
 RUN apt-key adv --keyserver pool.sks-keyservers.net --recv-keys 5072E1F5 && \
     apt-get update && \

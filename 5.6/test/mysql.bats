@@ -18,9 +18,9 @@ teardown() {
   unset OLD_DATA_DIRECTORY
 }
 
-@test "It should install MySQL 5.6.26" {
+@test "It should install MySQL 5.6.28" {
   run mysqld --version
-  [[ "$output" =~ "Ver 5.6.26"  ]]
+  [[ "$output" =~ "Ver 5.6.28"  ]]
 }
 
 @test "It should support SSL connections" {
