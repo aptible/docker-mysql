@@ -26,3 +26,12 @@ parse_url()
 
   database="$(echo $url | grep / | cut -d/ -f2-)"
 }
+
+random_chars() {
+  < /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c "$1"
+}
+
+randint_32() {
+  # 4 bytes = 32 bits
+  echo "$(openssl rand 4 | od -DAn | tr -d '[[:space:]]')"
+}

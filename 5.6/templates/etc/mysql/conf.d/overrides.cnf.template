@@ -13,8 +13,6 @@ myisam-recover = BACKUP
 query_cache_limit = 1M
 query_cache_size = 16M
 
-expire_logs_days = 10
-max_binlog_size = 100M
 max_connect_errors = 10512000
 
 ssl-ca=DATA_DIRECTORY/ssl/ca-cert.pem

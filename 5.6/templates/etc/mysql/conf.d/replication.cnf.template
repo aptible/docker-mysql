@@ -1,0 +1,7 @@
+[mysqld]
+server-id = __SERVER_ID__
+
+# Some reasonable replication defaults.
+binlog-format = ROW
+expire-logs-days = 10
+max-binlog-size = 100M
