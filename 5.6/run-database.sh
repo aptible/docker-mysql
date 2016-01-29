@@ -4,6 +4,7 @@ set -o errexit
 . /usr/bin/utilities.sh
 
 
+DEFAULT_PORT=3306
 SSL_CIPHER='DHE-RSA-AES256-SHA'
 
 
@@ -16,7 +17,8 @@ function mysql_initialize_conf_dir () {
 
   SERVER_ID="$(cat "${DATA_DIRECTORY}/server-id")"
 
-  cp /etc/mysql/conf.d/replication.cnf.template /etc/mysql/conf.d/replication.cnf
+  # Replication configuration
+  cp /etc/mysql/conf.d/replication.cnf{.template,}
   sed -i "s/__SERVER_ID__/${SERVER_ID}/g" /etc/mysql/conf.d/replication.cnf
 
   if [[ "${SERVER_ID}" -eq 1 ]]; then
@@ -24,7 +26,10 @@ function mysql_initialize_conf_dir () {
     echo "log-bin = mysql-bin" >> /etc/mysql/conf.d/replication.cnf
   fi
 
-  sed "s:DATA_DIRECTORY:${DATA_DIRECTORY}:g" /etc/mysql/conf.d/overrides.cnf.template > /etc/mysql/conf.d/overrides.cnf
+  ## Overrides configuration
+  cp /etc/mysql/conf.d/overrides.cnf{.template,}
+  sed -i "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" /etc/mysql/conf.d/overrides.cnf
+  sed -i "s:__PORT__:${PORT:-${DEFAULT_PORT}}:g" /etc/mysql/conf.d/overrides.cnf
 }
 
 
@@ -67,7 +72,7 @@ function mysql_shutdown () {
 
 
 if [[ "$1" == "--initialize" ]]; then
-  # We're initializing a master. Use server-id = 1.
+  # We're initializing a master; use server-id = 1.
   echo 1 > "${DATA_DIRECTORY}/server-id"
 
   mysql_initialize_certs
@@ -105,7 +110,7 @@ elif [[ "$1" == "--activate-leader" ]]; then
   # Send our replication data
   echo "MYSQL_REPLICATION_SLAVE_SERVER_ID='${MYSQL_REPLICATION_SLAVE_SERVER_ID}'"
   echo "MYSQL_REPLICATION_MASTER_ROOT_URL='${2}'"
-  echo "MYSQL_REPLICATION_MASTER_REPL_URL='mysql://${MYSQL_REPLICATION_USERNAME}:${MYSQL_REPLICATION_PASSPHRASE}@${host}:${port:-3306}/${database}'"
+  echo "MYSQL_REPLICATION_MASTER_REPL_URL='mysql://${MYSQL_REPLICATION_USERNAME}:${MYSQL_REPLICATION_PASSPHRASE}@${host}:${port:-${DEFAULT_PORT}}/${database}'"
 
 elif [[ "$1" == "--initialize-follower" ]]; then
   # Expected configuration in the environment (these values are provided by --activate-leader)
