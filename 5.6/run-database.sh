@@ -87,40 +87,41 @@ if [[ "$1" == "--initialize" ]]; then
 
   mysql_shutdown
 
-elif [[ "$1" == "--activate-leader" ]]; then
-  [ -z "$2" ] && echo "docker run -it aptible/mysql --activate-leader mysql://..." && exit 1
-  # First, generate a new server ID for the slave unless one is provided. We'll use it for the username, too.
+elif [[ "$1" == "--initialize-from" ]]; then
+  [ -z "$2" ] && echo "docker run -it aptible/mysql --initialize-from mysql://..." && exit 1
+
+  # First, generate a new server ID for this slave unless one is provided. We'll use it for the username, too.
   # In MySQL < 5.7, usernames must be <= 16 chars, and replication password must be < 32 chars.
-  : ${MYSQL_REPLICATION_SLAVE_SERVER_ID:="$(randint_32)"}
-  : ${MYSQL_REPLICATION_USERNAME:="repl-$MYSQL_REPLICATION_SLAVE_SERVER_ID"}
-  : ${MYSQL_REPLICATION_PASSPHRASE:="$(random_chars 16)"}
-  : ${MYSQL_REPLICATION_HOST:="%"}
+
+  # shellcheck disable=SC2086
+  {
+    : ${MYSQL_REPLICATION_SLAVE_SERVER_ID:="$(randint_32)"}
+    : ${MYSQL_REPLICATION_USERNAME:="repl-$MYSQL_REPLICATION_SLAVE_SERVER_ID"}
+    : ${MYSQL_REPLICATION_PASSPHRASE:="$(random_chars 16)"}
+    : ${MYSQL_REPLICATION_HOST:="%"}
+    : ${MYSQL_REPLICATION_ROOT:="root"}  # By default, ignore user from URL and use root to reconfigure existing MySQL
+  }
 
   parse_url "$2"
+
+  # Ensure port has a value from here on
+  port="${port:-$DEFAULT_PORT}"
 
   # CREATE USER will fail if the user already exists, which we want here.
   # We could retry, but the probability that we'll use twice the same ID
   # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
-  MYSQL_PWD="$password" mysql --host "$host" --port "$port" --user "$user" --ssl --execute "
+
+  # shellcheck disable=SC2154
+  MYSQL_PWD="$password" mysql --host "$host" --port "$port" --user "${MYSQL_REPLICATION_ROOT}" --ssl-cipher="${SSL_CIPHER}" \
+    --execute "
     CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE';
-    GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'localhost';
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' REQUIRE SSL;
   "
 
-  # Send our replication data
-  echo "MYSQL_REPLICATION_SLAVE_SERVER_ID='${MYSQL_REPLICATION_SLAVE_SERVER_ID}'"
-  echo "MYSQL_REPLICATION_MASTER_ROOT_URL='${2}'"
-  echo "MYSQL_REPLICATION_MASTER_REPL_URL='mysql://${MYSQL_REPLICATION_USERNAME}:${MYSQL_REPLICATION_PASSPHRASE}@${host}:${port:-${DEFAULT_PORT}}/${database}'"
-
-elif [[ "$1" == "--initialize-follower" ]]; then
-  # Expected configuration in the environment (these values are provided by --activate-leader)
-  # - MYSQL_REPLICATION_SLAVE_SERVER_ID
-  # - MYSQL_REPLICATION_MASTER_ROOT_URL
-  # - MYSQL_REPLICATION_MASTER_REPL_URL
   MASTER_DUMPFILE=/tmp/master.dump
 
   # Create slave configuration
-  echo "${MYSQL_REPLICATION_SLAVE_SERVER_ID}" > "${DATA_DIRECTORY}/server-id"
+  echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/server-id"
 
   mysql_initialize_certs
   mysql_initialize_data_dir
@@ -136,23 +137,26 @@ elif [[ "$1" == "--initialize-follower" ]]; then
   # - It only works properly with InnoDB tables, but MySQL won't enforce it.
   # - There can't be any data definition operations (e.g. ALTER TABLE happening at the same time), but
   #   MySQL won't enforce it.
-  parse_url "${MYSQL_REPLICATION_MASTER_ROOT_URL}"
-  MYSQL_PWD="$password" mysqldump --all-databases --master-data --host "$host" --port "$port" --user "$user" --ssl-cipher="${SSL_CIPHER}" > "${MASTER_DUMPFILE}"
 
+  # shellcheck disable=SC2154
+  MYSQL_PWD="$password" mysqldump --host "$host" --port "$port" --user "$MYSQL_REPLICATION_ROOT" --ssl-cipher="${SSL_CIPHER}" \
+    --all-databases --master-data \
+    > "${MASTER_DUMPFILE}"
 
   # Launch MySQL, load the data in, then start the slave.
   # The slave will restart automatically next time MySQL starts up.
+
   mysql_start_background
 
   # Change MASTER_PORT *must* be run before loading the dump, otherwise MySQL
   # will assume the master has changed and reset the positions set by the dump...
   # http://dev.mysql.com/doc/refman/5.6/en/change-master-to.html
-  parse_url "${MYSQL_REPLICATION_MASTER_REPL_URL}"
+  # shellcheck disable=SC2154
   mysql -e "CHANGE MASTER TO
     MASTER_HOST = '${host}',
     MASTER_PORT = ${port},
-    MASTER_USER = '${user}',
-    MASTER_PASSWORD = '${password}',
+    MASTER_USER = '${MYSQL_REPLICATION_USERNAME}',
+    MASTER_PASSWORD = '${MYSQL_REPLICATION_PASSPHRASE}',
     MASTER_SSL = 1,
     MASTER_SSL_CIPHER = '${SSL_CIPHER}';"
 
@@ -167,6 +171,7 @@ elif [[ "$1" == "--initialize-follower" ]]; then
 elif [[ "$1" == "--client" ]]; then
   [ -z "$2" ] && echo "docker run -it aptible/mysql --client mysql://..." && exit
   parse_url "$2"
+
   shift
   shift
   MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHER}" "$@"
