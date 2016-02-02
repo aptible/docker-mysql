@@ -59,7 +59,7 @@ function mysql_initialize_certs () {
 
 function mysql_initialize_data_dir () {
   chown -R mysql:mysql "$DATA_DIRECTORY"
-  mysql_install_db --user=mysql -ldata="$DATA_DIRECTORY"
+  mysql_install_db --user=mysql --datadir="$DATA_DIRECTORY"
 }
 
 
