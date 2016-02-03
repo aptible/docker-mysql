@@ -1,11 +1,13 @@
 #!/bin/bash
 set -o errexit
 
+
+# shellcheck disable=SC1091
 . /usr/bin/utilities.sh
 
 
 DEFAULT_PORT=3306
-SSL_CIPHER='DHE-RSA-AES256-SHA'
+SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
 
 
 function mysql_initialize_conf_dir () {
@@ -29,7 +31,8 @@ function mysql_initialize_conf_dir () {
   ## Overrides configuration
   cp /etc/mysql/conf.d/overrides.cnf{.template,}
   sed -i "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" /etc/mysql/conf.d/overrides.cnf
-  sed -i "s:__PORT__:${PORT:-${DEFAULT_PORT}}:g" /etc/mysql/conf.d/overrides.cnf
+  sed -i "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" /etc/mysql/conf.d/overrides.cnf
+  sed -i "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" /etc/mysql/conf.d/overrides.cnf
 }
 
 
@@ -112,7 +115,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysql --host "$host" --port "$port" --user "${MYSQL_REPLICATION_ROOT}" --ssl-cipher="${SSL_CIPHER}" \
+  MYSQL_PWD="$password" mysql --host "$host" --port "$port" --user "${MYSQL_REPLICATION_ROOT}" --ssl-cipher="${SSL_CIPHERS}" \
     --execute "
     CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE';
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' REQUIRE SSL;
@@ -139,7 +142,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   #   MySQL won't enforce it.
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "$port" --user "$MYSQL_REPLICATION_ROOT" --ssl-cipher="${SSL_CIPHER}" \
+  MYSQL_PWD="$password" mysqldump --host "$host" --port "$port" --user "$MYSQL_REPLICATION_ROOT" --ssl-cipher="${SSL_CIPHERS}" \
     --all-databases --master-data \
     > "${MASTER_DUMPFILE}"
 
@@ -158,7 +161,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
     MASTER_USER = '${MYSQL_REPLICATION_USERNAME}',
     MASTER_PASSWORD = '${MYSQL_REPLICATION_PASSPHRASE}',
     MASTER_SSL = 1,
-    MASTER_SSL_CIPHER = '${SSL_CIPHER}';"
+    MASTER_SSL_CIPHER = '${SSL_CIPHERS}';"
 
   # Load initial data and log position
   mysql < "${MASTER_DUMPFILE}"
@@ -174,21 +177,29 @@ elif [[ "$1" == "--client" ]]; then
 
   shift
   shift
-  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHER}" "$@"
+
+  # shellcheck disable=SC2154
+  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" "$@"
 
 elif [[ "$1" == "--dump" ]]; then
   [ -z "$2" ] && echo "docker run aptible/mysql --dump mysql://... > dump.sql" && exit
   parse_url "$2"
+
   # If the file /dump-output exists, write output there. Otherwise, use stdout.
+  # shellcheck disable=SC2015
   [ -e /dump-output ] && exec 3>/dump-output || exec 3>&1
-  MYSQL_PWD="$password" mysqldump --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHER}" >&3
+
+  # shellcheck disable=SC2154
+  MYSQL_PWD="$password" mysqldump --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" >&3
 
 elif [[ "$1" == "--restore" ]]; then
   [ -z "$2" ] && echo "docker run -i aptible/mysql --restore mysql://... < dump.sql" && exit
   parse_url "$2"
+
   # If the file /restore-input exists, read input there. Otherwise, use stdin.
+  # shellcheck disable=SC2015
   [ -e /restore-input ] && exec 3</restore-input || exec 3<&0
-  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHER}" <&3
+  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" <&3
 
 elif [[ "$1" == "--readonly" ]]; then
   echo "Starting MySQL in read-only mode..."

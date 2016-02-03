@@ -21,10 +21,10 @@ ssl-ca   = __DATA_DIRECTORY__/ssl/ca-cert.pem
 ssl-cert = __DATA_DIRECTORY__/ssl/server-cert.pem
 ssl-key  = __DATA_DIRECTORY__/ssl/server-key.pem
 
-ssl-cipher = DHE-RSA-AES256-SHA:AES128-SHA
+ssl-cipher = __SSL_CIPHERS__
 
 [client]
-ssl-cipher = DHE-RSA-AES256-SHA:AES128-SHA
+ssl-cipher = __SSL_CIPHERS__
 port = __PORT__
 
 [innodb]
