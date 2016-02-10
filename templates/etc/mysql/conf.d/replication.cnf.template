@@ -5,3 +5,6 @@ server-id = __SERVER_ID__
 binlog-format = ROW
 expire-logs-days = 10
 max-binlog-size = 100M
+
+# Log name options are injected here by bin/run-database.sh at runtime
+# depending on this server's role.

@@ -8,16 +8,17 @@ set -o errexit
 
 DEFAULT_PORT=3306
 SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
+SERVER_ID_FILE=".aptible-server-id"
 
 
 function mysql_initialize_conf_dir () {
   # Verify the server id exists for backwards compatibility with databases created
   # on older versions of this image.
-  if [[ ! -f "${DATA_DIRECTORY}/server-id" ]]; then
-    echo 1 > "${DATA_DIRECTORY}/server-id"
+  if [[ ! -f "${DATA_DIRECTORY}/${SERVER_ID_FILE}" ]]; then
+    echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
   fi
 
-  SERVER_ID="$(cat "${DATA_DIRECTORY}/server-id")"
+  SERVER_ID="$(cat "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
 
   # Replication configuration
   cp /etc/mysql/conf.d/replication.cnf{.template,}
@@ -25,7 +26,10 @@ function mysql_initialize_conf_dir () {
 
   if [[ "${SERVER_ID}" -eq 1 ]]; then
     # We're the master, enable binary logging
-    echo "log-bin = mysql-bin" >> /etc/mysql/conf.d/replication.cnf
+    echo "log-bin = mysql-bin" >> "/etc/mysql/conf.d/replication.cnf"
+  else
+    # We're the slave, give our relay a fixed name
+    echo "relay-log = mysql-relay" >> "/etc/mysql/conf.d/replication.cnf"
   fi
 
   ## Overrides configuration
@@ -76,7 +80,8 @@ function mysql_shutdown () {
 
 if [[ "$1" == "--initialize" ]]; then
   # We're initializing a master; use server-id = 1.
-  echo 1 > "${DATA_DIRECTORY}/server-id"
+  mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
+  echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
   mysql_initialize_certs
   mysql_initialize_data_dir
@@ -134,7 +139,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   MASTER_DUMPFILE=/tmp/master.dump
 
   # Create slave configuration
-  echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/server-id"
+  echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
   mysql_initialize_certs
   mysql_initialize_data_dir
