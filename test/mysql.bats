@@ -4,7 +4,7 @@ setup() {
   export OLD_DATA_DIRECTORY="$DATA_DIRECTORY"
   export DATA_DIRECTORY=/tmp/datadir
   mkdir "$DATA_DIRECTORY"
-  /usr/bin/run-database.sh --initialize
+  PASSPHRASE=foobar /usr/bin/run-database.sh --initialize
   while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
   /usr/bin/run-database.sh > /tmp/mysql.log 2>&1 &
   until mysqladmin ping; do sleep 0.1; done
@@ -21,6 +21,19 @@ teardown() {
 @test "It should install MySQL $MYSQL_VERSION" {
   run mysqld --version
   [[ "$output" =~ "Ver ${MYSQL_VERSION%%-*}" ]]  # Package version up to -
+}
+
+@test "It should bring up a working MySQL instance with aptible and aptible-nossl users" {
+  for user in aptible aptible-nossl; do
+    url="mysql://${user}:foobar@127.0.0.1:3306/db"
+    run-database.sh --client "$url" -e "DROP TABLE IF EXISTS foo;"
+    run-database.sh --client "$url" -e "CREATE TABLE foo (i INT);"
+    run-database.sh --client "$url" -e "INSERT INTO foo VALUES (1234);"
+    run run-database.sh --client "$url" -e "SELECT * FROM foo;"
+    [ "$status" -eq "0" ]
+    [ "${lines[0]}" = "i" ]
+    [ "${lines[1]}" = "1234" ]
+  done
 }
 
 @test "It should support SSL connections" {

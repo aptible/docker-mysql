@@ -83,10 +83,20 @@ if [[ "$1" == "--initialize" ]]; then
   mysql_initialize_conf_dir
   mysql_start_background
 
+  # Create our DB
   mysql -e "CREATE DATABASE ${DATABASE:-db}"
+
+  # Create Aptible users, set passwords
   mysql -e "GRANT ALL ON *.* to 'root'@'%' IDENTIFIED BY '$PASSPHRASE' WITH GRANT OPTION"  # Required to grant replication permissions
   mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
   mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+
+  # Delete all anonymous users. We don't use (or want those), but more importantly they prevent
+  # legitimate users from authenticating from hosts where anonymous users can login (because MySQL
+  # matches the anonymous users first), which includes localhost.
+  # https://bugs.mysql.com/bug.php?id=31061
+  mysql -e "DELETE FROM mysql.user WHERE User='';"
+  mysql -e "FLUSH PRIVILEGES;"  # Probably not useful since we're shutting down; but who knows.
 
   mysql_shutdown
 
