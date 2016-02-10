@@ -10,16 +10,14 @@ max_allowed_packet = 16M
 thread_stack = 192K
 thread_cache_size = 8
 
-myisam-recover = BACKUP
-
 query_cache_limit = 1M
 query_cache_size = 16M
 
 max_connect_errors = 10512000
 
-ssl-ca   = __DATA_DIRECTORY__/ssl/ca-cert.pem
-ssl-cert = __DATA_DIRECTORY__/ssl/server-cert.pem
-ssl-key  = __DATA_DIRECTORY__/ssl/server-key.pem
+ssl-ca   = __CONF_DIRECTORY__/ssl/ca-cert.pem
+ssl-cert = __CONF_DIRECTORY__/ssl/server-cert.pem
+ssl-key  = __CONF_DIRECTORY__/ssl/server-key.pem
 
 ssl-cipher = __SSL_CIPHERS__
 

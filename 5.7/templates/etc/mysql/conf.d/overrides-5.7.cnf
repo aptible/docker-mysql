@@ -1,0 +1,2 @@
+[mysqld]
+myisam-recover-options = BACKUP

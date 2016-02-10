@@ -11,6 +11,18 @@ SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
 SERVER_ID_FILE=".aptible-server-id"
 
 
+# MySQL 5.6 / 5.7 compatibility
+if [[ "$MYSQL_VERSION" = "5.6" ]]; then
+  SSL_CLIENT_OPT="--ssl"
+  MYSQL_INSTALL_DB_BASE_COMMAND="mysql_install_db"
+elif [[ "$MYSQL_VERSION" = "5.7" ]]; then
+  SSL_CLIENT_OPT="--ssl-mode=REQUIRED"
+  MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
+else
+  exit "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
+fi
+
+
 function mysql_initialize_conf_dir () {
   # Verify the server id exists for backwards compatibility with databases created
   # on older versions of this image.
@@ -20,29 +32,39 @@ function mysql_initialize_conf_dir () {
 
   SERVER_ID="$(cat "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
 
-  # Replication configuration
-  cp /etc/mysql/conf.d/replication.cnf{.template,}
-  sed -i "s/__SERVER_ID__/${SERVER_ID}/g" /etc/mysql/conf.d/replication.cnf
+  ## My.cnf
+  cp "${CONF_DIRECTORY}/my.cnf"{.template,}
+  sed -i "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" "${CONF_DIRECTORY}/my.cnf"
+
+  ## Replication configuration
+  cp "${CONF_DIRECTORY}/conf.d/replication.cnf"{.template,}
+  sed -i "s/__SERVER_ID__/${SERVER_ID}/g" "${CONF_DIRECTORY}/conf.d/replication.cnf"
 
   if [[ "${SERVER_ID}" -eq 1 ]]; then
     # We're the master, enable binary logging
-    echo "log-bin = mysql-bin" >> "/etc/mysql/conf.d/replication.cnf"
+    echo "log-bin = mysql-bin" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
   else
     # We're the slave, give our relay a fixed name
-    echo "relay-log = mysql-relay" >> "/etc/mysql/conf.d/replication.cnf"
+    echo "relay-log = mysql-relay" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
   fi
 
   ## Overrides configuration
-  cp /etc/mysql/conf.d/overrides.cnf{.template,}
-  sed -i "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" /etc/mysql/conf.d/overrides.cnf
-  sed -i "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" /etc/mysql/conf.d/overrides.cnf
-  sed -i "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" /etc/mysql/conf.d/overrides.cnf
+  override_file="conf.d/overrides.cnf"
+  # Useless use of cat, but makes the pipeline more readable.
+  # shellcheck disable=SC2002
+  cat "${CONF_DIRECTORY}/${override_file}.template" \
+    | grep --fixed-strings --invert-match "__NOT_IF_MYSQL_${MYSQL_VERSION}__" \
+    | sed "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" \
+    | sed "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" \
+    | sed "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" \
+    | sed "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" \
+    > "${CONF_DIRECTORY}/${override_file}"
 }
 
 
 function mysql_initialize_certs () {
-  mkdir -p "$DATA_DIRECTORY/ssl"
-  pushd "$DATA_DIRECTORY/ssl"
+  mkdir -p "$CONF_DIRECTORY/ssl"
+  pushd "$CONF_DIRECTORY/ssl"
 
   # All of these certificates need to be generated and signed in the past.
   # Otherwise, MySQL can reject the configuration with an error indicating that
@@ -63,13 +85,17 @@ function mysql_initialize_certs () {
 
 function mysql_initialize_data_dir () {
   chown -R mysql:mysql "$DATA_DIRECTORY"
-  mysql_install_db --user=mysql --datadir="$DATA_DIRECTORY"
+  $MYSQL_INSTALL_DB_BASE_COMMAND --user=mysql --datadir="$DATA_DIRECTORY"
 }
 
 
 function mysql_start_background () {
-  mysqld_safe --ssl &
+  mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl &
   until nc -z localhost 3306; do sleep 0.1; done
+}
+
+function mysql_start_foreground () {
+  exec mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
 
@@ -83,7 +109,6 @@ if [[ "$1" == "--initialize" ]]; then
   mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
   echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
-  mysql_initialize_certs
   mysql_initialize_data_dir
   mysql_initialize_conf_dir
   mysql_start_background
@@ -130,7 +155,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysql --host "$host" --port "$port" --user "${MYSQL_REPLICATION_ROOT}" --ssl-cipher="${SSL_CIPHERS}" \
+  MYSQL_PWD="$password" mysql --host "$host" --port "${port:-$DEFAULT_PORT}" --user "${MYSQL_REPLICATION_ROOT}" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" \
     --execute "
     CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE';
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' REQUIRE SSL;
@@ -141,7 +166,6 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
-  mysql_initialize_certs
   mysql_initialize_data_dir
   mysql_initialize_conf_dir
 
@@ -157,7 +181,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   #   MySQL won't enforce it.
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "$port" --user "$MYSQL_REPLICATION_ROOT" --ssl-cipher="${SSL_CIPHERS}" \
+  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" \
     --all-databases --master-data \
     > "${MASTER_DUMPFILE}"
 
@@ -194,7 +218,7 @@ elif [[ "$1" == "--client" ]]; then
   shift
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" "$@"
+  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" "$@"
 
 elif [[ "$1" == "--dump" ]]; then
   [ -z "$2" ] && echo "docker run aptible/mysql --dump mysql://... > dump.sql" && exit
@@ -205,7 +229,7 @@ elif [[ "$1" == "--dump" ]]; then
   [ -e /dump-output ] && exec 3>/dump-output || exec 3>&1
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" >&3
+  MYSQL_PWD="$password" mysqldump --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" >&3
 
 elif [[ "$1" == "--restore" ]]; then
   [ -z "$2" ] && echo "docker run -i aptible/mysql --restore mysql://... < dump.sql" && exit
@@ -214,14 +238,16 @@ elif [[ "$1" == "--restore" ]]; then
   # If the file /restore-input exists, read input there. Otherwise, use stdin.
   # shellcheck disable=SC2015
   [ -e /restore-input ] && exec 3</restore-input || exec 3<&0
-  MYSQL_PWD="$password" mysql --host="$host" --port="$port" --user="$user" "$database" --ssl-cipher="${SSL_CIPHERS}" <&3
+  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" <&3
 
 elif [[ "$1" == "--readonly" ]]; then
   echo "Starting MySQL in read-only mode..."
+  mysql_initialize_certs
   mysql_initialize_conf_dir
-  exec mysqld_safe --read-only --ssl # TODO - Function?
+  mysql_start_foreground --read-only
 
 else
+  mysql_initialize_certs
   mysql_initialize_conf_dir
-  exec mysqld_safe --ssl
+  mysql_start_foreground
 fi
