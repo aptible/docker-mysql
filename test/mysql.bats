@@ -110,3 +110,10 @@ teardown() {
   [ "${lines[1]}" = "i: 1" ]
   [ "${#lines[@]}" = "2" ]
 }
+
+@test "It should not let users read private key material" {
+  mysql db -e "CREATE TABLE data (col TEXT);"
+  run mysql db -e "LOAD DATA INFILE '/etc/mysql/ssl/server-key.pem' INTO TABLE data;"
+  [[ "$status" -eq 1 ]]
+  [[ "$output" =~ "cannot execute this statement" ]]
+}

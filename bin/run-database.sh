@@ -95,6 +95,8 @@ function mysql_start_background () {
 }
 
 function mysql_start_foreground () {
+  unset SSL_CERTIFICATE
+  unset SSL_KEY
   exec mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
@@ -109,8 +111,9 @@ if [[ "$1" == "--initialize" ]]; then
   mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
   echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
-  mysql_initialize_data_dir
+  mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_data_dir
   mysql_start_background
 
   # Create our DB
@@ -166,8 +169,9 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
-  mysql_initialize_data_dir
+  mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_data_dir
 
   # Now, retrieve data from the master
   # Note that this will fail if binary logging is not enabled on the master (because we use --master-data, which

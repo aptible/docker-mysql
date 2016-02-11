@@ -3,6 +3,8 @@ bind-address = 0.0.0.0
 port = __PORT__
 
 datadir = __DATA_DIRECTORY__
+secure-file-priv = __DATA_DIRECTORY__
+
 skip-external-locking
 
 key_buffer_size = 16M
