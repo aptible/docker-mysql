@@ -19,7 +19,8 @@ elif [[ "$MYSQL_VERSION" = "5.7" ]]; then
   SSL_CLIENT_OPT="--ssl-mode=REQUIRED"
   MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
 else
-  exit "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
+  echo "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
+  exit 1
 fi
 
 
