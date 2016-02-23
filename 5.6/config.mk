@@ -1,1 +1,2 @@
-export MYSQL_VERSION = 5.6.29-1debian7
+export MYSQL_VERSION = 5.6
+export MYSQL_PACKAGE_VERSION = 5.6.29-1debian7

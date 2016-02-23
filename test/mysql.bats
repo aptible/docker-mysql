@@ -2,8 +2,11 @@
 
 setup() {
   export OLD_DATA_DIRECTORY="$DATA_DIRECTORY"
+  export OLD_CONF_DIRECTORY="$CONF_DIRECTORY"
   export DATA_DIRECTORY=/tmp/datadir
+  export CONF_DIRECTORY=/tmp/confdir
   mkdir "$DATA_DIRECTORY"
+  cp -r "$OLD_CONF_DIRECTORY" "$CONF_DIRECTORY"  # Templates are in there
   PASSPHRASE=foobar /usr/bin/run-database.sh --initialize
   while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
   /usr/bin/run-database.sh > /tmp/mysql.log 2>&1 &
@@ -14,13 +17,16 @@ teardown() {
   mysqladmin shutdown
   while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
   rm -rf "$DATA_DIRECTORY"
+  rm -rf "$CONF_DIRECTORY"
   export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
+  export CONF_DIRECTORY="$OLD_CONF_DIRECTORY"
   unset OLD_DATA_DIRECTORY
+  unset OLD_CONF_DIRECTORY
 }
 
-@test "It should install MySQL $MYSQL_VERSION" {
+@test "It should install MySQL $MYSQL_PACKAGE_VERSION" {
   run mysqld --version
-  [[ "$output" =~ "Ver ${MYSQL_VERSION%%-*}" ]]  # Package version up to -
+  [[ "$output" =~ "Ver ${MYSQL_PACKAGE_VERSION%%-*}" ]]  # Package version up to -
 }
 
 @test "It should bring up a working MySQL instance with aptible and aptible-nossl users" {
@@ -37,17 +43,17 @@ teardown() {
 }
 
 @test "It should support SSL connections" {
-  have_ssl=$(mysql -Ee "show variables where variable_name = 'have_ssl'" | grep Value | awk '{ print $2 }')
+  have_ssl=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show variables where variable_name = 'have_ssl'" | grep Value | awk '{ print $2 }')
   [[ "$have_ssl" == "YES" ]]
 }
 
 @test "It should be built with OpenSSL support" {
-  have_openssl=$(mysql -Ee "show variables where variable_name = 'have_openssl'" | grep Value | awk '{ print $2 }')
+  have_openssl=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show variables where variable_name = 'have_openssl'" | grep Value | awk '{ print $2 }')
   [[ "$have_openssl" == "YES" ]]
 }
 
 @test "It should allow connections over SSL" {
-  cipher=$(mysql -Ee "show status like 'Ssl_cipher'" | grep Value | awk '{ print $2 }')
+  cipher=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show status like 'Ssl_cipher'" | grep Value | awk '{ print $2 }')
   [[ "$cipher" == "DHE-RSA-AES256-SHA" ]]
 }
 
@@ -103,4 +109,11 @@ teardown() {
   [ "$status" -eq "0" ]
   [ "${lines[1]}" = "i: 1" ]
   [ "${#lines[@]}" = "2" ]
+}
+
+@test "It should not let users read private key material" {
+  mysql db -e "CREATE TABLE data (col TEXT);"
+  run mysql db -e "LOAD DATA INFILE '/etc/mysql/ssl/server-key.pem' INTO TABLE data;"
+  [[ "$status" -eq 1 ]]
+  [[ "$output" =~ "cannot execute this statement" ]]
 }
