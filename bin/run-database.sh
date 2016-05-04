@@ -39,14 +39,6 @@ function mysql_initialize_conf_dir () {
   cp "${CONF_DIRECTORY}/conf.d/replication.cnf"{.template,}
   sed -i "s/__SERVER_ID__/${SERVER_ID}/g" "${CONF_DIRECTORY}/conf.d/replication.cnf"
 
-  if [[ "${SERVER_ID}" -eq 1 ]]; then
-    # We're the master, enable binary logging
-    echo "log-bin = mysql-bin" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
-  else
-    # We're the slave, give our relay a fixed name
-    echo "relay-log = mysql-relay" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
-  fi
-
   ## Overrides configuration
   override_file="conf.d/overrides.cnf"
   # Useless use of cat, but makes the pipeline more readable.
