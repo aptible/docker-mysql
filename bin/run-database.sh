@@ -13,10 +13,8 @@ SERVER_ID_FILE=".aptible-server-id"
 
 # MySQL 5.6 / 5.7 compatibility
 if [[ "$MYSQL_VERSION" = "5.6" ]]; then
-  SSL_CLIENT_OPT="--ssl"
   MYSQL_INSTALL_DB_BASE_COMMAND="mysql_install_db"
 elif [[ "$MYSQL_VERSION" = "5.7" ]]; then
-  SSL_CLIENT_OPT="--ssl-mode=REQUIRED"
   MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
 else
   echo "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
@@ -40,14 +38,6 @@ function mysql_initialize_conf_dir () {
   ## Replication configuration
   cp "${CONF_DIRECTORY}/conf.d/replication.cnf"{.template,}
   sed -i "s/__SERVER_ID__/${SERVER_ID}/g" "${CONF_DIRECTORY}/conf.d/replication.cnf"
-
-  if [[ "${SERVER_ID}" -eq 1 ]]; then
-    # We're the master, enable binary logging
-    echo "log-bin = mysql-bin" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
-  else
-    # We're the slave, give our relay a fixed name
-    echo "relay-log = mysql-relay" >> "${CONF_DIRECTORY}/conf.d/replication.cnf"
-  fi
 
   ## Overrides configuration
   override_file="conf.d/overrides.cnf"
@@ -159,7 +149,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysql --host "$host" --port "${port:-$DEFAULT_PORT}" --user "${MYSQL_REPLICATION_ROOT}" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" \
+  MYSQL_PWD="$password" mysql --host "$host" --port "${port:-$DEFAULT_PORT}" --user "${MYSQL_REPLICATION_ROOT}" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
     --execute "
     CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE';
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' REQUIRE SSL;
@@ -186,7 +176,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   #   MySQL won't enforce it.
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" \
+  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
     --all-databases --master-data \
     > "${MASTER_DUMPFILE}"
 
@@ -223,7 +213,7 @@ elif [[ "$1" == "--client" ]]; then
   shift
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" "$@"
+  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" "$@"
 
 elif [[ "$1" == "--dump" ]]; then
   [ -z "$2" ] && echo "docker run aptible/mysql --dump mysql://... > dump.sql" && exit
@@ -234,7 +224,7 @@ elif [[ "$1" == "--dump" ]]; then
   [ -e /dump-output ] && exec 3>/dump-output || exec 3>&1
 
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" >&3
+  MYSQL_PWD="$password" mysqldump --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" >&3
 
 elif [[ "$1" == "--restore" ]]; then
   [ -z "$2" ] && echo "docker run -i aptible/mysql --restore mysql://... < dump.sql" && exit
@@ -243,7 +233,7 @@ elif [[ "$1" == "--restore" ]]; then
   # If the file /restore-input exists, read input there. Otherwise, use stdin.
   # shellcheck disable=SC2015
   [ -e /restore-input ] && exec 3</restore-input || exec 3<&0
-  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" "$SSL_CLIENT_OPT" --ssl-cipher="${SSL_CIPHERS}" <&3
+  MYSQL_PWD="$password" mysql --host="$host" --port "${port:-$DEFAULT_PORT}" --user="$user" "$database" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" <&3
 
 elif [[ "$1" == "--readonly" ]]; then
   echo "Starting MySQL in read-only mode..."
