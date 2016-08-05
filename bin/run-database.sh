@@ -81,7 +81,7 @@ function mysql_initialize_data_dir () {
 
 
 function mysql_start_background () {
-  mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl &
+  /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl &
   until nc -z localhost 3306; do sleep 0.1; done
   until mysqladmin ping; do sleep 0.1; done
 }
@@ -89,7 +89,7 @@ function mysql_start_background () {
 function mysql_start_foreground () {
   unset SSL_CERTIFICATE
   unset SSL_KEY
-  exec mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
+  exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
 
