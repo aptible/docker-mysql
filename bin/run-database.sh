@@ -83,6 +83,7 @@ function mysql_initialize_data_dir () {
 function mysql_start_background () {
   mysqld_safe --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl &
   until nc -z localhost 3306; do sleep 0.1; done
+  until mysqladmin ping; do sleep 0.1; done
 }
 
 function mysql_start_foreground () {
