@@ -58,9 +58,9 @@ This status variable is non-empty exactly when SSL is enabled for the session.
 
 ## Available Tags
 
-* `latest`: Currently MySQL 5.7.11 (Community Server)
-* `5.7`: MySQL 5.7.11 (Community Server)
-* `5.6`: MySQL 5.6.29 (Community Server)
+* `latest`: Currently MySQL 5.7.14 (Community Server)
+* `5.7`: MySQL 5.7.14 (Community Server)
+* `5.6`: MySQL 5.6.32 (Community Server)
 
 ## Tests
 
