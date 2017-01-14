@@ -89,7 +89,7 @@ function mysql_start_background () {
 function mysql_start_foreground () {
   unset SSL_CERTIFICATE
   unset SSL_KEY
-  exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
+  exec dockerize -stdout /var/db/general-query-log.log -stdout /var/db/slow-query-log.log usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
 

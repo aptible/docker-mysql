@@ -35,6 +35,11 @@ ADD bin/utilities.sh /usr/bin/
 ADD test /tmp/test
 RUN bats /tmp/test
 
+ENV DOCKERIZE_VERSION v0.3.0
+RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
+    && tar -C /usr/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
+    && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
+
 VOLUME ["$DATA_DIRECTORY"]
 EXPOSE 3306
 
