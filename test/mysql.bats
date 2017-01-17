@@ -3,25 +3,41 @@
 setup() {
   export OLD_DATA_DIRECTORY="$DATA_DIRECTORY"
   export OLD_CONF_DIRECTORY="$CONF_DIRECTORY"
+  export OLD_LOG_DIRECTORY="$LOG_DIRECTORY"
   export DATA_DIRECTORY=/tmp/datadir
   export CONF_DIRECTORY=/tmp/confdir
-  mkdir "$DATA_DIRECTORY"
+  export LOG_DIRECTORY=/tmp/logdir
+  mkdir "$DATA_DIRECTORY" "$LOG_DIRECTORY"
+  chown -R mysql:mysql "$LOG_DIRECTORY"
   cp -r "$OLD_CONF_DIRECTORY" "$CONF_DIRECTORY"  # Templates are in there
+
   PASSPHRASE=foobar /usr/bin/run-database.sh --initialize
   while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
-  /usr/bin/run-database.sh > /tmp/mysql.log 2>&1 &
+
+  export LOG_FILE="/tmp/mysql.log"
+  /usr/bin/run-database.sh > "$LOG_FILE" 2>&1 &
   until mysqladmin ping; do sleep 0.1; done
 }
 
 teardown() {
+  pkill --signal KILL tail
+
   mysqladmin shutdown
   while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
+
+  cat "$LOG_FILE"
+  rm -f "$LOG_FILE"
+  unset LOG_FILE
+
   rm -rf "$DATA_DIRECTORY"
   rm -rf "$CONF_DIRECTORY"
+  rm -rf "$LOG_DIRECTORY"
   export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
   export CONF_DIRECTORY="$OLD_CONF_DIRECTORY"
+  export LOG_DIRECTORY="$OLD_LOG_DIRECTORY"
   unset OLD_DATA_DIRECTORY
   unset OLD_CONF_DIRECTORY
+  unset OLD_LOG_DIRECTORY
 }
 
 @test "It should install MySQL $MYSQL_PACKAGE_VERSION" {
@@ -116,4 +132,34 @@ teardown() {
   run mysql db -e "LOAD DATA INFILE '/etc/mysql/ssl/server-key.pem' INTO TABLE data;"
   [[ "$status" -eq 1 ]]
   [[ "$output" =~ "cannot execute this statement" ]]
+}
+
+@test "It should not log queries by default, but log to stdout when enabled" {
+  truncate -s 0 "$LOG_FILE"
+
+  canary='hello from the log file'
+  mysql db -e "SELECT '$canary';"
+  ! grep -q "$canary" "$LOG_FILE"
+
+  mysql db -e "SET GLOBAL general_log = 1;"
+  mysql db -e "SELECT '$canary';"
+
+  sleep 2 # in case we're being slow for some reason. not ideal but we'll be OK
+
+  grep -Eq "general.*${canary}" "$LOG_FILE"
+}
+
+@test "It should not slow log queries by default, but log them to stdout when enabled" {
+  truncate -s 0 "$LOG_FILE"
+
+  mysql db -e "SET GLOBAL long_query_time = 1;"
+  mysql db -e "SELECT SLEEP(3);"
+  ! grep -q "SLEEP" "$LOG_FILE"
+
+  mysql db -e "SET GLOBAL slow_query_log = 1;"
+  mysql db -e "SELECT SLEEP(3);"
+
+  sleep 2 # same as above
+
+  grep -Eq "slow.*SLEEP" "$LOG_FILE"
 }

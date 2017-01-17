@@ -27,7 +27,9 @@ ADD templates/etc/mysql $CONF_DIRECTORY
 ADD <%= ENV.fetch 'TAG' %>/templates/etc/mysql $CONF_DIRECTORY
 
 ENV DATA_DIRECTORY /var/db
-RUN mkdir -p "$DATA_DIRECTORY" && chown -R mysql:mysql "$DATA_DIRECTORY"
+ENV LOG_DIRECTORY /var/log/mysql
+RUN mkdir -p "$DATA_DIRECTORY" "$LOG_DIRECTORY" \
+ && chown -R mysql:mysql "$DATA_DIRECTORY" "$LOG_DIRECTORY"
 
 ADD bin/run-database.sh /usr/bin/
 ADD bin/utilities.sh /usr/bin/
