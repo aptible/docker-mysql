@@ -23,6 +23,9 @@ ssl-key  = __CONF_DIRECTORY__/ssl/server-key.pem
 
 ssl-cipher = __SSL_CIPHERS__
 
+general_log_file = __LOG_DIRECTORY__/general.log
+slow_query_log_file = __LOG_DIRECTORY__/slow.log
+
 [client]
 ssl-cipher = __SSL_CIPHERS__
 port = __PORT__

@@ -10,6 +10,11 @@ DEFAULT_PORT=3306
 SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
 SERVER_ID_FILE=".aptible-server-id"
 
+MYSQL_LOG_FILES=(
+  "${LOG_DIRECTORY}/general.log"
+  "${LOG_DIRECTORY}/slow.log"
+)
+
 
 # MySQL 5.6 / 5.7 compatibility
 if [[ "$MYSQL_VERSION" = "5.6" ]]; then
@@ -47,6 +52,7 @@ function mysql_initialize_conf_dir () {
     | grep --fixed-strings --invert-match "__NOT_IF_MYSQL_${MYSQL_VERSION}__" \
     | sed "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" \
     | sed "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" \
+    | sed "s:__LOG_DIRECTORY__:${LOG_DIRECTORY}:g" \
     | sed "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" \
     | sed "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" \
     > "${CONF_DIRECTORY}/${override_file}"
@@ -74,6 +80,13 @@ function mysql_initialize_certs () {
 }
 
 
+function mysql_initialize_log_dir () {
+  # This directory isn't mounted, so we never need to re-initialize it.
+  touch "${MYSQL_LOG_FILES[@]}"
+  chown mysql:mysql "${MYSQL_LOG_FILES[@]}"
+}
+
+
 function mysql_initialize_data_dir () {
   chown -R mysql:mysql "$DATA_DIRECTORY"
   $MYSQL_INSTALL_DB_BASE_COMMAND --user=mysql --datadir="$DATA_DIRECTORY"
@@ -89,6 +102,12 @@ function mysql_start_background () {
 function mysql_start_foreground () {
   unset SSL_CERTIFICATE
   unset SSL_KEY
+
+  # See: http://unix.stackexchange.com/a/337779
+  for log in "${MYSQL_LOG_FILES[@]}"; do
+    tail -n 0 --quiet -F "$log" 2>&1 | sed -ue "s/^/$(basename "$log"): /" &
+  done
+
   exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
@@ -105,7 +124,9 @@ if [[ "$1" == "--initialize" ]]; then
 
   mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_log_dir
   mysql_initialize_data_dir
+
   mysql_start_background
 
   # Create our DB
@@ -163,6 +184,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_log_dir
   mysql_initialize_data_dir
 
   # Now, retrieve data from the master
@@ -240,10 +262,12 @@ elif [[ "$1" == "--readonly" ]]; then
   echo "Starting MySQL in read-only mode..."
   mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_log_dir
   mysql_start_foreground --read-only
 
 else
   mysql_initialize_certs
   mysql_initialize_conf_dir
+  mysql_initialize_log_dir
   mysql_start_foreground
 fi
