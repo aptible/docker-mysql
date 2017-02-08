@@ -12,3 +12,13 @@ log-bin = mysql-bin
 # Relay logging is only going to be used by slaves, but it doesn't
 # hurt to have the option here.
 relay-log = mysql-relay
+
+# Ensure the binlog data is consistent on disk. If we run out of space or crash
+# uncleanly, this will be helpful. Naturally, this will impact performance, but
+# it's the price we pay for not losing data, and it's actually the default as
+# of MySQL 5.7.7 (for those that like to live on the edge, it can always be
+# disabled at runtime).
+# See https://dev.mysql.com/doc/refman/5.7/en/binary-log.html for an
+# interesting discussion on the interactions between sync-binlog and InnoDB
+# settings.
+sync-binlog = 1
