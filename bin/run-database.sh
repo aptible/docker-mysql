@@ -108,6 +108,12 @@ function mysql_start_foreground () {
     tail -n 0 --quiet -F "$log" 2>&1 | sed -ue "s/^/$(basename "$log"): /" &
   done
 
+  # Read an optional config file from the persistent volume.
+  EXTRA_FILE="${DATA_DIRECTORY}/persist.cnf"
+  if [ -f "$EXTRA_FILE" ]; then
+    cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/"
+  fi
+
   exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 

@@ -1,43 +1,13 @@
 #!/usr/bin/env bats
 
+source "${BATS_TEST_DIRNAME}/test_helper.sh"
+
 setup() {
-  export OLD_DATA_DIRECTORY="$DATA_DIRECTORY"
-  export OLD_CONF_DIRECTORY="$CONF_DIRECTORY"
-  export OLD_LOG_DIRECTORY="$LOG_DIRECTORY"
-  export DATA_DIRECTORY=/tmp/datadir
-  export CONF_DIRECTORY=/tmp/confdir
-  export LOG_DIRECTORY=/tmp/logdir
-  mkdir "$DATA_DIRECTORY" "$LOG_DIRECTORY"
-  chown -R mysql:mysql "$LOG_DIRECTORY"
-  cp -r "$OLD_CONF_DIRECTORY" "$CONF_DIRECTORY"  # Templates are in there
-
-  PASSPHRASE=foobar /usr/bin/run-database.sh --initialize
-  while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
-
-  export LOG_FILE="/tmp/mysql.log"
-  /usr/bin/run-database.sh > "$LOG_FILE" 2>&1 &
-  until mysqladmin ping; do sleep 0.1; done
+  start_mysql
 }
 
 teardown() {
-  pkill --signal KILL tail
-
-  mysqladmin shutdown
-  while [ -f /var/run/mysqld/mysqld.pid ]; do sleep 0.1; done
-
-  cat "$LOG_FILE"
-  rm -f "$LOG_FILE"
-  unset LOG_FILE
-
-  rm -rf "$DATA_DIRECTORY"
-  rm -rf "$CONF_DIRECTORY"
-  rm -rf "$LOG_DIRECTORY"
-  export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
-  export CONF_DIRECTORY="$OLD_CONF_DIRECTORY"
-  export LOG_DIRECTORY="$OLD_LOG_DIRECTORY"
-  unset OLD_DATA_DIRECTORY
-  unset OLD_CONF_DIRECTORY
-  unset OLD_LOG_DIRECTORY
+  stop_mysql
 }
 
 @test "It should install MySQL $MYSQL_PACKAGE_VERSION" {
@@ -162,4 +132,19 @@ teardown() {
   sleep 2 # same as above
 
   grep -Eq "slow.*SLEEP" "$LOG_FILE"
+}
+
+@test "It should read a config file from persistent storage." {
+
+  run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
+  [ "${lines[1]}" = "@@sql_mode: STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION" ]
+
+  stop_server
+
+  printf "[mysqld]\nsql_mode = ONLY_FULL_GROUP_BY" > /tmp/datadir/persist.cnf
+
+  run_server
+
+  run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
+  [ "${lines[1]}" = "@@sql_mode: ONLY_FULL_GROUP_BY" ]
 }
