@@ -135,7 +135,6 @@ teardown() {
 }
 
 @test "It should read a config file from persistent storage." {
-
   run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
   [ "${lines[1]}" = "@@sql_mode: STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION" ]
 
@@ -147,4 +146,9 @@ teardown() {
 
   run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
   [ "${lines[1]}" = "@@sql_mode: ONLY_FULL_GROUP_BY" ]
+}
+
+@test "It should configure innodb_log_file_size" {
+  run-database.sh --client "mysql://root@localhost/db" \
+    -Ee "SELECT @@innodb_log_file_size/1024/1024;" | grep 256
 }

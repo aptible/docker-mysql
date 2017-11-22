@@ -8,6 +8,7 @@ set -o errexit
 DEFAULT_PORT=3306
 SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
 SERVER_ID_FILE=".aptible-server-id"
+INNODB_LOG_SIZE_CONFIG=".aptible-innodb-log-file-size"
 
 MYSQL_LOG_FILES=(
   "${LOG_DIRECTORY}/general.log"
@@ -67,6 +68,14 @@ function mysql_initialize_conf_dir () {
   EXTRA_FILE="${DATA_DIRECTORY}/${persist_file}"
   if [ -f "$EXTRA_FILE" ]; then
     cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/20-${persist_file}"
+  fi
+
+  # Finally, copy over the InnoDB log file size configuration, if it exists (we
+  # used to not create this file). Nothing should be allowed to take precedence
+  # over this file.
+  if [[ -f "${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}" ]]; then
+    cp "${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}" \
+       "${CONF_DIRECTORY}/conf.d/99-innodb-log-file-size.cnf"
   fi
 }
 
@@ -128,11 +137,30 @@ function mysql_shutdown () {
   mysqladmin shutdown
 }
 
+function mysql_initialize_innodb_log_file_size() {
+  local file="${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}"
+
+  # This file can should be initialized once, since older versions of MySQL
+  # will refuse to start if we change its value.
+  if [[ -f "$file" ]]; then
+    echo "The innodb_log_file_size (${file}) file already exists!"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$file")"
+
+  # We set the size of the log files to 256M, which is the value Percona
+  # recommends as "a good place to start". Considering that, by default,
+  # databases on Enclave have 10GB of disk, this is a reasonable value.
+  printf '[mysqld]\ninnodb_log_file_size=%s\n' 256M > "${file}"
+}
+
 
 if [[ "$1" == "--initialize" ]]; then
   # We're initializing a master; use server-id = 1.
   mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
   echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
+  mysql_initialize_innodb_log_file_size
 
   mysql_initialize_certs
   mysql_initialize_conf_dir
@@ -193,6 +221,8 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
+
+  mysql_initialize_innodb_log_file_size
 
   mysql_initialize_certs
   mysql_initialize_conf_dir
