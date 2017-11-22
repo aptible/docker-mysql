@@ -1,7 +1,6 @@
 #!/bin/bash
 set -o errexit
 
-
 # shellcheck disable=SC1091
 . /usr/bin/utilities.sh
 
@@ -41,21 +40,34 @@ function mysql_initialize_conf_dir () {
   sed -i "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" "${CONF_DIRECTORY}/my.cnf"
 
   ## Replication configuration
-  cp "${CONF_DIRECTORY}/conf.d/replication.cnf"{.template,}
-  sed -i "s/__SERVER_ID__/${SERVER_ID}/g" "${CONF_DIRECTORY}/conf.d/replication.cnf"
+  replication_file="replication.cnf"
+  # shellcheck disable=SC2002
+  cat "${CONF_DIRECTORY}/conf.d/${replication_file}.template" \
+    | sed "s/__SERVER_ID__/${SERVER_ID}/g" \
+    > "${CONF_DIRECTORY}/conf.d/00-${replication_file}"
 
-  ## Overrides configuration
-  override_file="conf.d/overrides.cnf"
+  ## Overrides configuration (read first)
+  override_file="overrides.cnf"
   # Useless use of cat, but makes the pipeline more readable.
   # shellcheck disable=SC2002
-  cat "${CONF_DIRECTORY}/${override_file}.template" \
+  cat "${CONF_DIRECTORY}/conf.d/${override_file}.template" \
     | grep --fixed-strings --invert-match "__NOT_IF_MYSQL_${MYSQL_VERSION}__" \
     | sed "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" \
     | sed "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" \
     | sed "s:__LOG_DIRECTORY__:${LOG_DIRECTORY}:g" \
     | sed "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" \
     | sed "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" \
-    > "${CONF_DIRECTORY}/${override_file}"
+    > "${CONF_DIRECTORY}/conf.d/01-${override_file}"
+
+  # Auto-tune (takes precedence on overrides)
+  /usr/local/bin/autotune > "${CONF_DIRECTORY}/conf.d/10-autotune.cnf"
+
+  # Read an optional config file from the persistent volume (taks precedence over all)
+  persist_file="persist.cnf"
+  EXTRA_FILE="${DATA_DIRECTORY}/${persist_file}"
+  if [ -f "$EXTRA_FILE" ]; then
+    cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/20-${persist_file}"
+  fi
 }
 
 
@@ -107,12 +119,6 @@ function mysql_start_foreground () {
   for log in "${MYSQL_LOG_FILES[@]}"; do
     tail -n 0 --quiet -F "$log" 2>&1 | sed -ue "s/^/$(basename "$log"): /" &
   done
-
-  # Read an optional config file from the persistent volume.
-  EXTRA_FILE="${DATA_DIRECTORY}/persist.cnf"
-  if [ -f "$EXTRA_FILE" ]; then
-    cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/"
-  fi
 
   exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }

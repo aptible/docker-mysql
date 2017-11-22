@@ -31,4 +31,9 @@ ssl-cipher = __SSL_CIPHERS__
 port = __PORT__
 
 [innodb]
+# TODO: Remove this section? [innodb] does not exist.
 innodb_flush_method=normal
+
+# TODO: innodb_log_file_size=256M Unfortunately, we can't change this in the
+# image or MySQL instances started earlier will refuse to read it. Ultimately,
+# we'll need to persist this to disk and configure it once.
