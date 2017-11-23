@@ -34,7 +34,7 @@ def choose_chunk_size(desired_pool_size, pool_instances):
     return int(chunk_size)
 
 
-def generate_config(_mysql_version, ram_mb):
+def generate_config(mysql_version, ram_mb):
     # We assign about 80% of RAM for the InnoDB buffer pool. This is not
     # perfect, but it's a decent rule of thumb when we don't know anything
     # about the user's workload.
@@ -53,11 +53,15 @@ def generate_config(_mysql_version, ram_mb):
 
     assert final_pool_size % (pool_instances * chunk_size) == 0
 
-    return {
+    ret = {
         "innodb_buffer_pool_size": "{0}M".format(final_pool_size),
-        "innodb_buffer_pool_chunk_size": "{0}M".format(chunk_size),
-        "innodb_buffer_pool_instances": str(pool_instances)
+        "innodb_buffer_pool_instances": str(pool_instances),
     }
+
+    if mysql_version >= (5, 7):
+        ret["innodb_buffer_pool_chunk_size"] = "{0}M".format(chunk_size)
+
+    return ret
 
 
 def main():
@@ -73,6 +77,26 @@ def main():
 
 def test():
     test_cases = [
+        [(5, 6), 0.5 * 1024, {
+            "innodb_buffer_pool_size": "408M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 1024, {
+            "innodb_buffer_pool_size": "816M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 2 * 1024, {
+            "innodb_buffer_pool_size": "1632M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 4 * 1024, {
+            "innodb_buffer_pool_size": "3264M",
+            "innodb_buffer_pool_instances": "3"
+        }],
+        [(5, 6), 7 * 1024, {
+            "innodb_buffer_pool_size": "5720M",
+            "innodb_buffer_pool_instances": "5"
+        }],
         [(5, 7), 0.5 * 1024, {
             "innodb_buffer_pool_size": "408M",
             "innodb_buffer_pool_chunk_size": "204M",
