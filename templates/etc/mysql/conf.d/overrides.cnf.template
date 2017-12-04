@@ -31,4 +31,5 @@ ssl-cipher = __SSL_CIPHERS__
 port = __PORT__
 
 [innodb]
+# TODO: Remove this section? [innodb] does not exist.
 innodb_flush_method=normal

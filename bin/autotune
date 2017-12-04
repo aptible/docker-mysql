@@ -1,0 +1,162 @@
+#!/usr/bin/env python
+import sys
+import os
+
+
+def approximate_chunk_size(desired_pool_size, pool_instances):
+    base = desired_pool_size / pool_instances
+
+    # MySQL indicates that you'll have problems if desired_pool_size /
+    # chunk_size is greater than 1000. We're unlikely to need to go this deep,
+    # so we just stop tuning the chunk size if we're about to go to more than
+    # 250 chunks.
+    if desired_pool_size / base > 2 * 125:
+        return base
+
+    # We don't want unreasonably small chunks (and we probably have only one
+    # pool if we're dealing with super small chunks anyway), so if we're about
+    # to consider chunks smaller than 256MB, we abort here.
+    if base <= 2 * 128:
+        return base
+
+    # Our chunks are a little too big, we can iterate further.
+    return approximate_chunk_size(
+        desired_pool_size / 2, pool_instances
+    )
+
+
+def choose_chunk_size(desired_pool_size, pool_instances):
+    # This method finds a chunk size that will let us maximize our pool size
+    # considering a given number of instances, all the while satisfying the
+    # MySQL requirement that pool_size be a multiple of chunk_size *
+    # pool_instances.
+    chunk_size = approximate_chunk_size(desired_pool_size, pool_instances)
+    return int(chunk_size)
+
+
+def generate_config(mysql_version, ram_mb):
+    # We assign about 80% of RAM for the InnoDB buffer pool. This is not
+    # perfect, but it's a decent rule of thumb when we don't know anything
+    # about the user's workload.
+    desired_pool_size = float(ram_mb * 0.8)
+
+    # We want our InnoDB pool instances to be about 1GB each.
+    pool_instances = max(int(desired_pool_size / 1024), 1)
+
+    # The pool_size must be a multiple of pool_instances * chunk_size. We
+    # choose the chunk_size to let us maximimize the pool_size, and truncate
+    # anything left over (it'll be small).
+    chunk_size = choose_chunk_size(desired_pool_size, pool_instances)
+    final_pool_size = int(desired_pool_size) - (
+        int(desired_pool_size) % (pool_instances * chunk_size)
+    )
+
+    assert final_pool_size % (pool_instances * chunk_size) == 0
+
+    ret = {
+        "innodb_buffer_pool_size": "{0}M".format(final_pool_size),
+        "innodb_buffer_pool_instances": str(pool_instances),
+    }
+
+    if mysql_version >= (5, 7):
+        ret["innodb_buffer_pool_chunk_size"] = "{0}M".format(chunk_size)
+
+    return ret
+
+
+def main():
+    raw_version = os.environ['MYSQL_VERSION']
+    mysql_version = tuple(int(x) for x in raw_version.split('.'))
+    ram_mb = int(os.environ.get('APTIBLE_CONTAINER_SIZE', '1024'))
+    config = generate_config(mysql_version, ram_mb)
+
+    print("[mysqld]")
+    for k, v in sorted(config.items()):
+        print("{0} = {1}".format(k, v))
+
+
+def test():
+    test_cases = [
+        [(5, 6), 0.5 * 1024, {
+            "innodb_buffer_pool_size": "408M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 1024, {
+            "innodb_buffer_pool_size": "816M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 2 * 1024, {
+            "innodb_buffer_pool_size": "1632M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 6), 4 * 1024, {
+            "innodb_buffer_pool_size": "3264M",
+            "innodb_buffer_pool_instances": "3"
+        }],
+        [(5, 6), 7 * 1024, {
+            "innodb_buffer_pool_size": "5720M",
+            "innodb_buffer_pool_instances": "5"
+        }],
+        [(5, 7), 0.5 * 1024, {
+            "innodb_buffer_pool_size": "408M",
+            "innodb_buffer_pool_chunk_size": "204M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 7), 1024, {
+            "innodb_buffer_pool_size": "816M",
+            "innodb_buffer_pool_chunk_size": "204M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 7), 2 * 1024, {
+            "innodb_buffer_pool_size": "1632M",
+            "innodb_buffer_pool_chunk_size": "204M",
+            "innodb_buffer_pool_instances": "1"
+        }],
+        [(5, 7), 4 * 1024, {
+            "innodb_buffer_pool_size": "3264M",
+            "innodb_buffer_pool_chunk_size": "136M",
+            "innodb_buffer_pool_instances": "3"
+        }],
+        [(5, 7), 7 * 1024, {
+            "innodb_buffer_pool_size": "5720M",
+            "innodb_buffer_pool_chunk_size": "143M",
+            "innodb_buffer_pool_instances": "5"
+        }],
+    ]
+
+    for version, size, expected_config in test_cases:
+        prefix = "MySQL {0} at {1}GB".format(
+            '.'.join(str(x) for x in version), size / 1024
+        )
+
+        real_config = generate_config(version, size)
+
+        real_keys = sorted(real_config.keys())
+        expected_keys = sorted(expected_config.keys())
+
+        m = "{0}: keys differ\n  Got: {1}\n  Expected: {2}".format(
+            prefix, real_keys, expected_keys
+        )
+        assert real_keys == expected_keys, m
+
+        for key, expected in expected_config.items():
+            real = real_config[key]
+            m = "{0}: {1} differs:\n  Got: {2}\n  Expected: {3}".format(
+                prefix, key, real, expected
+            )
+            assert real == expected, m
+
+    sys.stderr.write("OK\n")
+
+
+def usage(program):
+    sys.stderr.write("Usage: {0} [--test]\n".format(program))
+
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        main()
+    elif len(sys.argv) == 2 and sys.argv[1] == '--test':
+        test()
+    else:
+        usage(sys.argv[0])

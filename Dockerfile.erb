@@ -17,6 +17,7 @@ RUN apt-key adv --keyserver pool.sks-keyservers.net --recv-keys 5072E1F5 && \
         procps \
         "mysql-server=${MYSQL_PACKAGE_VERSION}" \
         "mysql-client=${MYSQL_PACKAGE_VERSION}" \
+        python-minimal \
         && \
     rm -rf /var/lib/apt/lists/*
 
@@ -33,6 +34,7 @@ RUN mkdir -p "$DATA_DIRECTORY" "$LOG_DIRECTORY" \
 
 ADD bin/run-database.sh /usr/bin/
 ADD bin/utilities.sh /usr/bin/
+ADD bin/autotune /usr/local/bin/
 
 ADD test /tmp/test
 RUN bats /tmp/test

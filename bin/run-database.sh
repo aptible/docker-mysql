@@ -1,7 +1,6 @@
 #!/bin/bash
 set -o errexit
 
-
 # shellcheck disable=SC1091
 . /usr/bin/utilities.sh
 
@@ -9,6 +8,7 @@ set -o errexit
 DEFAULT_PORT=3306
 SSL_CIPHERS='DHE-RSA-AES256-SHA:AES128-SHA'
 SERVER_ID_FILE=".aptible-server-id"
+INNODB_LOG_SIZE_CONFIG=".aptible-innodb-log-file-size"
 
 MYSQL_LOG_FILES=(
   "${LOG_DIRECTORY}/general.log"
@@ -41,21 +41,42 @@ function mysql_initialize_conf_dir () {
   sed -i "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" "${CONF_DIRECTORY}/my.cnf"
 
   ## Replication configuration
-  cp "${CONF_DIRECTORY}/conf.d/replication.cnf"{.template,}
-  sed -i "s/__SERVER_ID__/${SERVER_ID}/g" "${CONF_DIRECTORY}/conf.d/replication.cnf"
+  replication_file="replication.cnf"
+  # shellcheck disable=SC2002
+  cat "${CONF_DIRECTORY}/conf.d/${replication_file}.template" \
+    | sed "s/__SERVER_ID__/${SERVER_ID}/g" \
+    > "${CONF_DIRECTORY}/conf.d/00-${replication_file}"
 
-  ## Overrides configuration
-  override_file="conf.d/overrides.cnf"
+  ## Overrides configuration (read first)
+  override_file="overrides.cnf"
   # Useless use of cat, but makes the pipeline more readable.
   # shellcheck disable=SC2002
-  cat "${CONF_DIRECTORY}/${override_file}.template" \
+  cat "${CONF_DIRECTORY}/conf.d/${override_file}.template" \
     | grep --fixed-strings --invert-match "__NOT_IF_MYSQL_${MYSQL_VERSION}__" \
     | sed "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" \
     | sed "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" \
     | sed "s:__LOG_DIRECTORY__:${LOG_DIRECTORY}:g" \
     | sed "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" \
     | sed "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" \
-    > "${CONF_DIRECTORY}/${override_file}"
+    > "${CONF_DIRECTORY}/conf.d/01-${override_file}"
+
+  # Auto-tune (takes precedence on overrides)
+  /usr/local/bin/autotune > "${CONF_DIRECTORY}/conf.d/10-autotune.cnf"
+
+  # Read an optional config file from the persistent volume (taks precedence over all)
+  persist_file="persist.cnf"
+  EXTRA_FILE="${DATA_DIRECTORY}/${persist_file}"
+  if [ -f "$EXTRA_FILE" ]; then
+    cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/20-${persist_file}"
+  fi
+
+  # Finally, copy over the InnoDB log file size configuration, if it exists (we
+  # used to not create this file). Nothing should be allowed to take precedence
+  # over this file.
+  if [[ -f "${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}" ]]; then
+    cp "${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}" \
+       "${CONF_DIRECTORY}/conf.d/99-innodb-log-file-size.cnf"
+  fi
 }
 
 
@@ -108,12 +129,6 @@ function mysql_start_foreground () {
     tail -n 0 --quiet -F "$log" 2>&1 | sed -ue "s/^/$(basename "$log"): /" &
   done
 
-  # Read an optional config file from the persistent volume.
-  EXTRA_FILE="${DATA_DIRECTORY}/persist.cnf"
-  if [ -f "$EXTRA_FILE" ]; then
-    cp "${EXTRA_FILE}" "${CONF_DIRECTORY}/conf.d/"
-  fi
-
   exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
 }
 
@@ -122,11 +137,30 @@ function mysql_shutdown () {
   mysqladmin shutdown
 }
 
+function mysql_initialize_innodb_log_file_size() {
+  local file="${DATA_DIRECTORY}/${INNODB_LOG_SIZE_CONFIG}"
+
+  # This file can should be initialized once, since older versions of MySQL
+  # will refuse to start if we change its value.
+  if [[ -f "$file" ]]; then
+    echo "The innodb_log_file_size (${file}) file already exists!"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$file")"
+
+  # We set the size of the log files to 256M, which is the value Percona
+  # recommends as "a good place to start". Considering that, by default,
+  # databases on Enclave have 10GB of disk, this is a reasonable value.
+  printf '[mysqld]\ninnodb_log_file_size=%s\n' 256M > "${file}"
+}
+
 
 if [[ "$1" == "--initialize" ]]; then
   # We're initializing a master; use server-id = 1.
   mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
   echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
+  mysql_initialize_innodb_log_file_size
 
   mysql_initialize_certs
   mysql_initialize_conf_dir
@@ -187,6 +221,8 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
+
+  mysql_initialize_innodb_log_file_size
 
   mysql_initialize_certs
   mysql_initialize_conf_dir

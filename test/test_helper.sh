@@ -27,9 +27,13 @@ initialize_mysql() {
 }
 
 run_server() {
+  # This would not be persisted from --initialize to regular start.
+  rm -rf "$CONF_DIRECTORY"
+  cp -r "$OLD_CONF_DIRECTORY" "$CONF_DIRECTORY"  # Templates are in there
+
   export LOG_FILE="/tmp/mysql.log"
   /usr/bin/run-database.sh > "$LOG_FILE" 2>&1 &
-  until mysqladmin ping; do sleep 0.1; done
+  until mysqladmin ping 2>/dev/null; do sleep 0.1; done
 }
 
 stop_server () {
