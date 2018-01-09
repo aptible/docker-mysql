@@ -104,36 +104,6 @@ teardown() {
   [[ "$output" =~ "cannot execute this statement" ]]
 }
 
-@test "It should not log queries by default, but log to stdout when enabled" {
-  truncate -s 0 "$LOG_FILE"
-
-  canary='hello from the log file'
-  mysql db -e "SELECT '$canary';"
-  ! grep -q "$canary" "$LOG_FILE"
-
-  mysql db -e "SET GLOBAL general_log = 1;"
-  mysql db -e "SELECT '$canary';"
-
-  sleep 2 # in case we're being slow for some reason. not ideal but we'll be OK
-
-  grep -Eq "general.*${canary}" "$LOG_FILE"
-}
-
-@test "It should not slow log queries by default, but log them to stdout when enabled" {
-  truncate -s 0 "$LOG_FILE"
-
-  mysql db -e "SET GLOBAL long_query_time = 1;"
-  mysql db -e "SELECT SLEEP(3);"
-  ! grep -q "SLEEP" "$LOG_FILE"
-
-  mysql db -e "SET GLOBAL slow_query_log = 1;"
-  mysql db -e "SELECT SLEEP(3);"
-
-  sleep 2 # same as above
-
-  grep -Eq "slow.*SLEEP" "$LOG_FILE"
-}
-
 @test "It should read a config file from persistent storage." {
   run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
   [ "${lines[1]}" = "@@sql_mode: STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION" ]
