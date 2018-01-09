@@ -2,6 +2,11 @@
 set -o errexit
 set -o nounset
 
+if [[ -n "${TRAVIS:-}" ]]; then
+  echo "Skip: this test does not work on Travis"
+  exit 0
+fi
+
 . test-util.sh
 . test-util-solo.sh
 
