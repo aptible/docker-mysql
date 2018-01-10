@@ -4,8 +4,18 @@ set -o nounset
 
 IMG="$REGISTRY/$REPOSITORY:$TAG"
 
-./test-restart.sh "$IMG"
-./test-replication.sh "$IMG"
+TESTS=(
+  test-log
+  test-restart
+  test-replication
+)
+
+for t in "${TESTS[@]}"; do
+  echo "--- START ${t} ---"
+  "./${t}.sh" "$IMG"
+  echo "--- OK    ${t} ---"
+  echo
+done
 
 echo "#############"
 echo "# Tests OK! #"
