@@ -122,3 +122,8 @@ teardown() {
   run-database.sh --client "mysql://root@localhost/db" \
     -Ee "SELECT @@innodb_log_file_size/1024/1024;" | grep 256
 }
+
+@test "It should disable the performance schema" {
+  run-database.sh --client "mysql://root@localhost/db" \
+    -Ee "SHOW VARIABLES LIKE 'performance_schema';" | grep OFF
+}
