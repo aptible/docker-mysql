@@ -5,6 +5,7 @@ RUN groupadd -r mysql && useradd -r -g mysql mysql
 
 ENV MYSQL_VERSION <%= ENV.fetch 'MYSQL_VERSION' %>
 ENV MYSQL_PACKAGE_VERSION <%= ENV.fetch 'MYSQL_PACKAGE_VERSION' %>
+ENV MYSQL_PERFORMANCE_SCHEMA <%= ENV.fetch 'MYSQL_PERFORMANCE_SCHEMA' %>
 
 ADD <%= ENV.fetch 'TAG' %>/templates/etc/apt/sources.list.d /etc/apt/sources.list.d
 

@@ -1,3 +1,2 @@
 [mysqld]
-performance_schema=OFF
 myisam-recover = BACKUP

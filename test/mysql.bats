@@ -124,6 +124,19 @@ teardown() {
 }
 
 @test "It should disable the performance schema" {
+  if [[ "$MYSQL_PERFORMANCE_SCHEMA" -eq 1 ]]; then
+    skip
+  fi
+
   run-database.sh --client "mysql://root@localhost/db" \
     -Ee "SHOW VARIABLES LIKE 'performance_schema';" | grep OFF
+}
+
+@test "It should enable the performance schema" {
+  if [[ "$MYSQL_PERFORMANCE_SCHEMA" -eq 0 ]]; then
+    skip
+  fi
+
+  run-database.sh --client "mysql://root@localhost/db" \
+    -Ee "SHOW VARIABLES LIKE 'performance_schema';" | grep ON
 }
