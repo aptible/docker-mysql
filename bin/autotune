@@ -16,7 +16,7 @@ def approximate_chunk_size(desired_pool_size, pool_instances):
     # We don't want unreasonably small chunks (and we probably have only one
     # pool if we're dealing with super small chunks anyway), so if we're about
     # to consider chunks smaller than 256MB, we abort here.
-    if base <= 2 * 128:
+    if base < 512:
         return base
 
     # Our chunks are a little too big, we can iterate further.
@@ -35,10 +35,12 @@ def choose_chunk_size(desired_pool_size, pool_instances):
 
 
 def generate_config(mysql_version, ram_mb):
-    # We assign about 80% of RAM for the InnoDB buffer pool. This is not
-    # perfect, but it's a decent rule of thumb when we don't know anything
-    # about the user's workload.
-    desired_pool_size = float(ram_mb * 0.6)
+    # We assign about 50% of RAM for the InnoDB buffer pool. This is not
+    # perfect (and it's less than what MySQL normally recommends), but it's a
+    # decent rule of thumb when we don't know anything about the user's
+    # workload yet still need to avoid spontaneously running out of RAM (and it
+    # certainly beats the default).
+    desired_pool_size = float(ram_mb * 0.5)
 
     # We want our InnoDB pool instances to be about 1GB each.
     pool_instances = max(int(desired_pool_size / 1024), 1)
@@ -78,49 +80,49 @@ def main():
 def test():
     test_cases = [
         [(5, 6), 0.5 * 1024, {
-            "innodb_buffer_pool_size": "306M",
+            "innodb_buffer_pool_size": "256M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 6), 1024, {
-            "innodb_buffer_pool_size": "612M",
+            "innodb_buffer_pool_size": "512M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 6), 2 * 1024, {
-            "innodb_buffer_pool_size": "1224M",
+            "innodb_buffer_pool_size": "1024M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 6), 4 * 1024, {
-            "innodb_buffer_pool_size": "2448M",
+            "innodb_buffer_pool_size": "2048M",
             "innodb_buffer_pool_instances": "2"
         }],
         [(5, 6), 7 * 1024, {
-            "innodb_buffer_pool_size": "4288M",
-            "innodb_buffer_pool_instances": "4"
+            "innodb_buffer_pool_size": "3576M",
+            "innodb_buffer_pool_instances": "3"
         }],
         [(5, 7), 0.5 * 1024, {
-            "innodb_buffer_pool_size": "306M",
-            "innodb_buffer_pool_chunk_size": "153M",
+            "innodb_buffer_pool_size": "256M",
+            "innodb_buffer_pool_chunk_size": "256M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 7), 1024, {
-            "innodb_buffer_pool_size": "612M",
-            "innodb_buffer_pool_chunk_size": "153M",
+            "innodb_buffer_pool_size": "512M",
+            "innodb_buffer_pool_chunk_size": "256M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 7), 2 * 1024, {
-            "innodb_buffer_pool_size": "1224M",
-            "innodb_buffer_pool_chunk_size": "153M",
+            "innodb_buffer_pool_size": "1024M",
+            "innodb_buffer_pool_chunk_size": "256M",
             "innodb_buffer_pool_instances": "1"
         }],
         [(5, 7), 4 * 1024, {
-            "innodb_buffer_pool_size": "2448M",
-            "innodb_buffer_pool_chunk_size": "153M",
+            "innodb_buffer_pool_size": "2048M",
+            "innodb_buffer_pool_chunk_size": "256M",
             "innodb_buffer_pool_instances": "2"
         }],
         [(5, 7), 7 * 1024, {
-            "innodb_buffer_pool_size": "4288M",
-            "innodb_buffer_pool_chunk_size": "134M",
-            "innodb_buffer_pool_instances": "4"
+            "innodb_buffer_pool_size": "3576M",
+            "innodb_buffer_pool_chunk_size": "298M",
+            "innodb_buffer_pool_instances": "3"
         }],
     ]
 

@@ -115,7 +115,11 @@ function mysql_initialize_data_dir () {
 
 
 function mysql_start_background () {
-  /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl &
+  /usr/sbin/mysqld \
+    --defaults-file="${CONF_DIRECTORY}/my.cnf" \
+    --ssl \
+    --performance-schema="$MYSQL_PERFORMANCE_SCHEMA" \
+    &
   until nc -z localhost 3306; do sleep 0.1; done
   until mysqladmin ping; do sleep 0.1; done
 }
@@ -129,7 +133,11 @@ function mysql_start_foreground () {
     tail -n 0 --quiet -F "$log" 2>&1 | sed -ue "s/^/$(basename "$log"): /" &
   done
 
-  exec /usr/sbin/mysqld --defaults-file="${CONF_DIRECTORY}/my.cnf" --ssl "$@"
+  exec /usr/sbin/mysqld \
+    --defaults-file="${CONF_DIRECTORY}/my.cnf" \
+    --ssl \
+    --performance-schema="$MYSQL_PERFORMANCE_SCHEMA" \
+    "$@"
 }
 
 
