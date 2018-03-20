@@ -114,14 +114,40 @@ function mysql_initialize_data_dir () {
 }
 
 
+function wait_for_mysql_nc {
+  for _ in $(seq 1 30); do
+    if nc -z localhost 3306; then
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  return 1
+}
+
+function wait_for_mysql_ping {
+  for _ in $(seq 1 30); do
+    if mysqladmin ping; then
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  return 1
+}
+
 function mysql_start_background () {
   /usr/sbin/mysqld \
     --defaults-file="${CONF_DIRECTORY}/my.cnf" \
+    --bind-address=127.0.0.1 \
     --ssl \
     --performance-schema="$MYSQL_PERFORMANCE_SCHEMA" \
     &
-  until nc -z localhost 3306; do sleep 0.1; done
-  until mysqladmin ping; do sleep 0.1; done
+
+  wait_for_mysql_nc
+  wait_for_mysql_ping
 }
 
 function mysql_start_foreground () {
