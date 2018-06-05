@@ -1,4 +1,4 @@
-FROM quay.io/aptible/debian:wheezy
+FROM quay.io/aptible/debian:jessie
 
 # cf. docker-library/mysql: explicitly create the user so uid and gid are consistent.
 RUN groupadd -r mysql && useradd -r -g mysql mysql
