@@ -21,6 +21,8 @@ if [[ "$MYSQL_VERSION" = "5.6" ]]; then
   MYSQL_INSTALL_DB_BASE_COMMAND="mysql_install_db"
 elif [[ "$MYSQL_VERSION" = "5.7" ]]; then
   MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
+elif [[ "$MYSQL_VERSION" = "8.0" ]]; then
+  MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
 else
   echo "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
   exit 1
@@ -55,6 +57,7 @@ function mysql_initialize_conf_dir () {
     | grep --fixed-strings --invert-match "__NOT_IF_MYSQL_${MYSQL_VERSION}__" \
     | sed "s:__DATA_DIRECTORY__:${DATA_DIRECTORY}:g" \
     | sed "s:__CONF_DIRECTORY__:${CONF_DIRECTORY}:g" \
+    | sed "s:__SCRATCH_DIRECTORY__:${SCRATCH_DIRECTORY}:g" \
     | sed "s:__LOG_DIRECTORY__:${LOG_DIRECTORY}:g" \
     | sed "s/__PORT__/${PORT:-${DEFAULT_PORT}}/g" \
     | sed "s/__SSL_CIPHERS__/${SSL_CIPHERS}/g" \
@@ -96,6 +99,8 @@ function mysql_initialize_certs () {
   # will generate a key in PKCS #8 format. This call ensures that the key is in
   # PKCS #1 format. Reference: https://bugs.mysql.com/bug.php?id=71271
   openssl rsa -in server-key-pkcs-8.pem -out server-key.pem
+
+  chown mysql:mysql server-cert.pem server-key.pem
 
   popd
 }
@@ -207,9 +212,20 @@ if [[ "$1" == "--initialize" ]]; then
   mysql -e "CREATE DATABASE ${DATABASE:-db}"
 
   # Create Aptible users, set passwords
-  mysql -e "GRANT ALL ON *.* to 'root'@'%' IDENTIFIED BY '$PASSPHRASE' WITH GRANT OPTION"  # Required to grant replication permissions
-  mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
-  mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+  # NOTE: GRANT OPTION is required to grant replication permissions
+  if [[ "$MYSQL_VERSION" = "5.6" ]] || [[ "$MYSQL_VERSION" = "5.7" ]]; then
+    mysql -e "GRANT ALL ON *.* to 'root'@'%' IDENTIFIED BY '$PASSPHRASE' WITH GRANT OPTION"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+  else
+    mysql -e "CREATE USER 'root'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "CREATE USER '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "CREATE USER '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+
+    mysql -e "GRANT ALL ON *.* to 'root'@'%' WITH GRANT OPTION"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%'"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%'"
+  fi
 
   # Delete all anonymous users. We don't use (or want those), but more importantly they prevent
   # legitimate users from authenticating from hosts where anonymous users can login (because MySQL
@@ -244,11 +260,24 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # We could retry, but the probability that we'll use twice the same ID
   # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
 
+  # In MySQL 8, REQUIRE SSL neds to be provided on CREATE USER, but in MySQL <
+  # 8, it needs to be provided in GRANT. Depending on our version, we do one or
+  # the other. This assumes our MySQL version and the primary's are the same,
+  # which is how we normally initialize slaves.
+
+  create_user_ssl="REQUIRE SSL"
+  grant_ssl=""
+
+  if [[ "$MYSQL_VERSION" = "5.6" ]] || [[ "$MYSQL_VERSION" = "5.7" ]]; then
+    create_user_ssl=""
+    grant_ssl="REQUIRE SSL"
+  fi
+
   # shellcheck disable=SC2154
   MYSQL_PWD="$password" mysql --host "$host" --port "${port:-$DEFAULT_PORT}" --user "${MYSQL_REPLICATION_ROOT}" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
     --execute "
-    CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE';
-    GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' REQUIRE SSL;
+    CREATE USER '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' IDENTIFIED BY '$MYSQL_REPLICATION_PASSPHRASE' $create_user_ssl;
+    GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' $grant_ssl;
   "
 
   MASTER_DUMPFILE=/tmp/master.dump
