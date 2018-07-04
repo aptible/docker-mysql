@@ -1,2 +1,4 @@
 [mysqld]
 myisam-recover = BACKUP
+query_cache_limit = 1M
+query_cache_size = 16M

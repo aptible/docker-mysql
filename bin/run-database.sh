@@ -21,6 +21,8 @@ if [[ "$MYSQL_VERSION" = "5.6" ]]; then
   MYSQL_INSTALL_DB_BASE_COMMAND="mysql_install_db"
 elif [[ "$MYSQL_VERSION" = "5.7" ]]; then
   MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
+elif [[ "$MYSQL_VERSION" = "8.0" ]]; then
+  MYSQL_INSTALL_DB_BASE_COMMAND="mysqld --initialize-insecure"
 else
   echo "Unrecognized MYSQL_VERSION: $MYSQL_VERSION"
   exit 1
@@ -96,6 +98,8 @@ function mysql_initialize_certs () {
   # will generate a key in PKCS #8 format. This call ensures that the key is in
   # PKCS #1 format. Reference: https://bugs.mysql.com/bug.php?id=71271
   openssl rsa -in server-key-pkcs-8.pem -out server-key.pem
+
+  chown mysql:mysql server-cert.pem server-key.pem
 
   popd
 }
@@ -207,9 +211,20 @@ if [[ "$1" == "--initialize" ]]; then
   mysql -e "CREATE DATABASE ${DATABASE:-db}"
 
   # Create Aptible users, set passwords
-  mysql -e "GRANT ALL ON *.* to 'root'@'%' IDENTIFIED BY '$PASSPHRASE' WITH GRANT OPTION"  # Required to grant replication permissions
-  mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
-  mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+  # NOTE: GRANT OPTION is required to grant replication permissions
+  if [[ "$MYSQL_VERSION" = "5.6" ]] || [[ "$MYSQL_VERSION" = "5.7" ]]; then
+    mysql -e "GRANT ALL ON *.* to 'root'@'%' IDENTIFIED BY '$PASSPHRASE' WITH GRANT OPTION"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+  else
+    mysql -e "CREATE USER 'root'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "CREATE USER '${USERNAME:-aptible}-nossl'@'%' IDENTIFIED BY '$PASSPHRASE'"
+    mysql -e "CREATE USER '${USERNAME:-aptible}'@'%' IDENTIFIED BY '$PASSPHRASE' REQUIRE SSL"
+
+    mysql -e "GRANT ALL ON *.* to 'root'@'%' WITH GRANT OPTION"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}-nossl'@'%'"
+    mysql -e "GRANT ALL ON ${DATABASE:-db}.* to '${USERNAME:-aptible}'@'%'"
+  fi
 
   # Delete all anonymous users. We don't use (or want those), but more importantly they prevent
   # legitimate users from authenticating from hosts where anonymous users can login (because MySQL
