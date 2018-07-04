@@ -1,4 +1,4 @@
-FROM quay.io/aptible/debian:jessie
+FROM quay.io/aptible/debian:stretch
 
 # cf. docker-library/mysql: explicitly create the user so uid and gid are consistent.
 RUN groupadd -r mysql && useradd -r -g mysql mysql
@@ -7,9 +7,14 @@ ENV MYSQL_VERSION <%= ENV.fetch 'MYSQL_VERSION' %>
 ENV MYSQL_PACKAGE_VERSION <%= ENV.fetch 'MYSQL_PACKAGE_VERSION' %>
 ENV MYSQL_PERFORMANCE_SCHEMA <%= ENV.fetch 'MYSQL_PERFORMANCE_SCHEMA' %>
 
+# We need gnupg for apt-key
+RUN apt-get update \
+ && apt-get install -y gnupg \
+ && rm -rf /var/lib/apt/lists/*
+
 ADD <%= ENV.fetch 'TAG' %>/templates/etc/apt/sources.list.d /etc/apt/sources.list.d
 
-RUN apt-key adv --keyserver pool.sks-keyservers.net --recv-keys 5072E1F5 && \
+RUN apt-key adv --keyserver ha.pool.sks-keyservers.net --recv-keys 5072E1F5 && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         faketime \
