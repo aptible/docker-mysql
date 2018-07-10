@@ -2,14 +2,6 @@
 
 source "${BATS_TEST_DIRNAME}/test_helper.sh"
 
-setup() {
-  start_mysql
-}
-
-teardown() {
-  stop_mysql
-}
-
 @test "It should install MySQL $MYSQL_PACKAGE_VERSION" {
   run mysqld --version
   [[ "$output" =~ "Ver ${MYSQL_PACKAGE_VERSION%%-*}" ]]  # Package version up to -

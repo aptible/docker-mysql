@@ -38,7 +38,7 @@ ADD bin/utilities.sh /usr/bin/
 ADD bin/autotune /usr/local/bin/
 
 ADD test /tmp/test
-RUN bats /tmp/test
+ADD <%= ENV.fetch 'TAG' %>/test /tmp/test
 
 VOLUME ["$DATA_DIRECTORY"]
 EXPOSE 3306
