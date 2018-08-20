@@ -17,7 +17,7 @@ ADD <%= ENV.fetch 'TAG' %>/templates/etc/apt/sources.list.d /etc/apt/sources.lis
 # Getting keys from keyservers tends to fail in Travis, so we want to retry.
 ADD bin/retry /usr/bin/
 
-RUN retry apt-key adv --keyserver ha.pool.sks-keyservers.net --recv-keys 5072E1F5 && \
+RUN retry apt-key adv --keyserver ha.pool.sks-keyservers.net --recv-keys 8C718D3B5072E1F5 && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         faketime \
