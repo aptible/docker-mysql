@@ -4,6 +4,10 @@ set -o nounset
 
 IMG="$REGISTRY/$REPOSITORY:$TAG"
 
+echo "Unit Tests..."
+docker run -it --rm --entrypoint "bash" "$IMG" \
+ -c "bats /tmp/test"
+
 TESTS=(
   test-log
   test-restart

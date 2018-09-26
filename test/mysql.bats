@@ -2,14 +2,6 @@
 
 source "${BATS_TEST_DIRNAME}/test_helper.sh"
 
-setup() {
-  start_mysql
-}
-
-teardown() {
-  stop_mysql
-}
-
 @test "It should install MySQL $MYSQL_PACKAGE_VERSION" {
   run mysqld --version
   [[ "$output" =~ "Ver ${MYSQL_PACKAGE_VERSION%%-*}" ]]  # Package version up to -
@@ -105,8 +97,8 @@ teardown() {
 }
 
 @test "It should read a config file from persistent storage." {
-  run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
-  [ "${lines[1]}" = "@@sql_mode: STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION" ]
+  run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;" | grep STRICT_TRANS_TABLES
+  ! run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;" | grep ONLY_FULL_GROUP_BY
 
   stop_server
 
@@ -114,8 +106,7 @@ teardown() {
 
   run_server
 
-  run run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;"
-  [ "${lines[1]}" = "@@sql_mode: ONLY_FULL_GROUP_BY" ]
+  run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;" | grep ONLY_FULL_GROUP_BY
 }
 
 @test "It should configure innodb_log_file_size" {

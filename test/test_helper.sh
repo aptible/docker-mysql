@@ -1,5 +1,13 @@
 #!/bin/bash
 
+setup() {
+  start_mysql
+}
+
+teardown() {
+  stop_mysql
+}
+
 start_mysql() {
   initialize_mysql
   run_server

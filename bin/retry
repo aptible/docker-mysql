@@ -1,0 +1,15 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+
+for i in $(seq 1 15); do
+  if "$@"; then
+    exit 0
+  fi
+
+  echo "attempt $i failed: $*"
+
+  sleep 1
+done
+
+exit 1
