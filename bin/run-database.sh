@@ -282,6 +282,9 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   MASTER_DUMPFILE=/tmp/master.dump
 
+  PRIVILEGES_DUMPFILE=/tmp/master.dump
+  DATA_DUMPFILE=/tmp/db.dump
+
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
@@ -305,8 +308,13 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # shellcheck disable=SC2154
   MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    --all-databases --master-data \
-    > "${MASTER_DUMPFILE}"
+    mysql --flush-privileges \
+    > "${PRIVILEGES_DUMPFILE}"
+
+   # shellcheck disable=SC2154
+  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
+    --master-data --all-databases \
+    > "${DATA_DUMPFILE}"
 
   # Launch MySQL, load the data in, then start the slave.
   # The slave will restart automatically next time MySQL starts up.
@@ -326,12 +334,13 @@ elif [[ "$1" == "--initialize-from" ]]; then
     MASTER_SSL_CIPHER = '${SSL_CIPHERS}';"
 
   # Load initial data and log position
-  mysql < "${MASTER_DUMPFILE}"
+  mysql mysql < "${PRIVILEGES_DUMPFILE}"
+  mysql < "${DATA_DUMPFILE}"
 
   mysql_shutdown
 
   # Cleanup
-  rm "${MASTER_DUMPFILE}"
+  rm "${PRIVILEGES_DUMPFILE}" "${DATA_DUMPFILE}"
 
 elif [[ "$1" == "--client" ]]; then
   [ -z "$2" ] && echo "docker run -it aptible/mysql --client mysql://..." && exit
