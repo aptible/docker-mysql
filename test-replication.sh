@@ -55,6 +55,11 @@ echo "Creating test_before table"
 docker run -it --rm "$IMG" --client "$MASTER_USER_URL" -e "CREATE TABLE test_before (col TEXT);"
 docker run -it --rm "$IMG" --client "$MASTER_USER_URL" -e "INSERT INTO test_before VALUES ('TEST DATA BEFORE');"
 
+# If a database has a view of a view, restoring a dump prepared by `mysqldump --all-database` will fail :
+#   ERROR 1449 (HY000) at line 1031: The user specified as a definer (‘root’@‘%’) does not exist
+# run-database.sh  --initialize from has been updated to handle this :
+docker run -it --rm "$IMG" --client "$MASTER_ROOT_URL" -e "CREATE DEFINER='root'@'%' SQL SECURITY DEFINER VIEW view1 AS SELECT * FROM test_before;"
+docker run -it --rm "$IMG" --client "$MASTER_ROOT_URL" -e "CREATE DEFINER='root'@'%' SQL SECURITY DEFINER VIEW view2 AS SELECT * FROM view1"
 
 echo "Initializing replication slave"
 SLAVE_PORT=33062
