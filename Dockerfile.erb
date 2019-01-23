@@ -14,10 +14,10 @@ RUN apt-get update \
 
 ADD <%= ENV.fetch 'TAG' %>/templates/etc/apt/sources.list.d /etc/apt/sources.list.d
 
-# Getting keys from keyservers tends to fail in Travis, so we want to retry.
-ADD bin/retry /usr/bin/
+# Getting keys from keyservers tends to fail in Travis, so we want to provide it manually
+ADD GPGkeys /tmp/
 
-RUN retry apt-key adv --keyserver ha.pool.sks-keyservers.net --recv-keys 8C718D3B5072E1F5 && \
+RUN apt-key add /tmp/mysql.key && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         faketime \
