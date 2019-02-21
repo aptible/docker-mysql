@@ -5,7 +5,7 @@
 
 [![](http://dockeri.co/image/aptible/mysql)](https://registry.hub.docker.com/u/aptible/mysql/)
 
-MySQL on Docker.
+MySQL Community Server on Docker.
 
 ## Installation and Usage
 
@@ -58,10 +58,10 @@ This status variable is non-empty exactly when SSL is enabled for the session.
 
 ## Available Tags
 
-* `latest`: Currently MySQL 5.7.14 (Community Server)
-* `8.0`: MySQL 8.0.14
-* `5.7`: MySQL 5.7.25 (Community Server)
-* `5.6`: MySQL 5.6.43 (Community Server)
+* `latest`: Currently MySQL MySQL 8.0.15
+* `8.0`: MySQL 8.0.15
+* `5.7`: MySQL 5.7.25
+* `5.6`: MySQL 5.6.43
 
 ## Tests
 
