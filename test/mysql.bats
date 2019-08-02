@@ -35,6 +35,40 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
   [[ "$cipher" == "DHE-RSA-AES256-SHA" ]]
 }
 
+@test "It should generate a certificate on startup" {
+  stop_mysql
+  start_mysql
+
+  [[ -f "${CONF_DIRECTORY}/ssl/server-cert.pem" ]]
+  [[ -f "${CONF_DIRECTORY}/ssl/server-key.pem" ]]
+}
+
+@test "It should accept a certificate from the environment" {
+  SSL_DIRECTORY="${CONF_DIRECTORY}/ssl"
+  ssl_temp_directory=$(mktemp -d)
+  pushd "$ssl_temp_directory"
+
+  local ssl_cert_file="server-cert.pem"
+  local ssl_key_file="server-key.pem"
+
+  faketime 'yesterday' openssl genrsa 2048 > ca-key.pem
+  faketime 'yesterday' openssl req -sha1 -new -x509 -nodes -days 10000 -key ca-key.pem -batch > ca-cert.pem
+  faketime 'yesterday' openssl req -sha1 -newkey rsa:2048 -days 10000 -nodes -keyout server-key-pkcs-8.pem -batch  > server-req.pem
+  faketime 'yesterday' openssl x509 -sha1 -req -in server-req.pem -days 10000  -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 > "$ssl_cert_file"
+
+  openssl rsa -in server-key-pkcs-8.pem -out "$ssl_key_file"
+
+  popd
+
+  stop_mysql
+  SSL_CERTIFICATE="$(cat "${ssl_temp_directory}/${ssl_cert_file}")" \
+  SSL_KEY="$(cat "${ssl_temp_directory}/${ssl_key_file}")" \
+  start_mysql
+
+  [[ -z "$(diff "${SSL_DIRECTORY}/${ssl_cert_file}" "${ssl_temp_directory}/${ssl_cert_file}")" ]]
+  [[ -z "$(diff "${SSL_DIRECTORY}/${ssl_key_file}" "${ssl_temp_directory}/${ssl_key_file}")" ]]
+}
+
 @test "It should set max_connect_errors to a large value" {
 # Containers from this Docker image are often run behind load balancers that
 # ping them constantly with TCP health checks, which can confuse MySQL because
