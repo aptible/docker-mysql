@@ -11,6 +11,7 @@ env:
     - TAG=5.7
     - TAG=5.7-performance-schema
     - TAG=8.0
+    - TAG=8.0-performance-schema
 
 script:
   - make build
