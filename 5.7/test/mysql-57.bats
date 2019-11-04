@@ -7,7 +7,7 @@ get_session_protocol() {
     -Ee "SHOW SESSION STATUS LIKE 'Ssl_version';" | grep Value | awk '{print $2}'
 }
 
-@test "It should be configured to allow connections using TLS1.0 and TLS1.1 and TLS1.2" {
+@test "It should be configured to allow connections using TLS1.0, TLS1.1, and TLS1.2" {
   tls_versions="$(run-database.sh --client 'mysql://root@localhost/db' \
     -Ee "SHOW GLOBAL VARIABLES LIKE 'tls_version';" | grep Value | awk '{print $2}')"
   [[ "$tls_versions" == "TLSv1,TLSv1.1,TLSv1.2" ]]
