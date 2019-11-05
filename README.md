@@ -58,10 +58,10 @@ This status variable is non-empty exactly when SSL is enabled for the session.
 
 ## Available Tags
 
-* `latest`: Currently MySQL MySQL 8.0.17
-* `8.0`: MySQL 8.0.17
-* `5.7`: MySQL 5.7.27
-* `5.6`: MySQL 5.6.45
+* `latest`: Currently MySQL MySQL 8.0.18
+* `8.0`: MySQL 8.0.18
+* `5.7`: MySQL 5.7.28
+* `5.6`: MySQL 5.6.46
 
 ## Tests
 
