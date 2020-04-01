@@ -53,4 +53,13 @@ ADD <%= ENV.fetch 'TAG' %>/test /tmp/test
 VOLUME ["$DATA_DIRECTORY"]
 EXPOSE 3306
 
+# Hack for https://bugs.mysql.com/bug.php?id=98484
+# Duplicating what was done previous to this change:
+# https://github.com/mysql/mysql-server/commit/71f1555b6915488f9f22afc2ecdc7973829b308e
+
+RUN stat /var/run/mysqld || \
+    ( mkdir /var/run/mysqld && \
+    chown mysql:mysql /var/run/mysqld && \
+    chmod 755 /var/run/mysqld )
+
 ENTRYPOINT ["run-database.sh"]

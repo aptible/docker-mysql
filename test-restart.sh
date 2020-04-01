@@ -23,7 +23,7 @@ wait_for_mysql
 echo "DB came back online; checking for clean shutdown"
 date
 docker logs "$MYSQL_CONTAINER" 2>&1 | grep "Shutdown complete"
-docker logs "$MYSQL_CONTAINER" 2>&1 | grep -qv "Crash recovery finished"
+(! docker logs "$MYSQL_CONTAINER" 2>&1 | grep -qi "crash recovery finished")
 
 echo "Attempting unclean shutdown"
 docker kill -s KILL "$MYSQL_CONTAINER"
@@ -32,4 +32,4 @@ docker start "$MYSQL_CONTAINER"
 echo "Waiting for DB to come back online"
 wait_for_mysql
 
-docker logs "$MYSQL_CONTAINER" 2>&1 | grep "Crash recovery finished"
+docker logs "$MYSQL_CONTAINER" 2>&1 | grep -i "crash recovery finished"
