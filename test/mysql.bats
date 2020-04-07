@@ -165,3 +165,8 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
   run-database.sh --client "mysql://root@localhost/db" \
     -Ee "SHOW VARIABLES LIKE 'performance_schema';" | grep ON
 }
+
+@test "It should have max_allowed_packet set to 64mb" {
+  run-database.sh --client "mysql://root@localhost/db" \
+    -Ee "SELECT @@GLOBAL.max_allowed_packet/1024/1024;" | grep 64
+}
