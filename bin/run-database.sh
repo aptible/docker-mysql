@@ -388,6 +388,10 @@ elif [[ "$1" == "--readonly" ]]; then
   mysql_start_foreground --read-only
 
 else
+  echo "----The following persistent configuration changes are present----"
+  egrep -v "^#" "${EXTRA_FILE}" || true
+  echo "--------------End persistent configuration changes----------------"
+
   mysql_initialize_certs
   mysql_initialize_conf_dir
   mysql_initialize_log_dir

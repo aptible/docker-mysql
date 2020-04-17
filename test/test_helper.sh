@@ -26,6 +26,8 @@ initialize_mysql() {
   export DATA_DIRECTORY=/tmp/datadir
   export CONF_DIRECTORY=/tmp/confdir
   export LOG_DIRECTORY=/tmp/logdir
+  export PERSIST_FILE="persist.cnf"
+  export EXTRA_FILE="${DATA_DIRECTORY}/${PERSIST_FILE}"
   mkdir "$DATA_DIRECTORY" "$LOG_DIRECTORY"
   chown -R mysql:mysql "$LOG_DIRECTORY"
   cp -r "$OLD_CONF_DIRECTORY" "$CONF_DIRECTORY"  # Templates are in there

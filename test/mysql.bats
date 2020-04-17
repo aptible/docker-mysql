@@ -136,11 +136,21 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
 
   stop_server
 
-  printf "[mysqld]\nsql_mode = ONLY_FULL_GROUP_BY" > /tmp/datadir/persist.cnf
+  printf "[mysqld]\nsql_mode = ONLY_FULL_GROUP_BY" > "${EXTRA_FILE}"
 
   run_server
 
   run-database.sh --client "mysql://root@localhost/db" -Ee "SELECT @@sql_mode;" | grep ONLY_FULL_GROUP_BY
+}
+
+@test "It prints the persistent configuration changes on boot." {
+
+  stop_server
+  printf "[mysqld]\nsql_mode = ONLY_FULL_GROUP_BY" > "${EXTRA_FILE}"
+  run_server
+
+  grep "persistent configuration changes" "${LOG_FILE}"
+  grep "ONLY_FULL_GROUP_BY" "${LOG_FILE}"
 }
 
 @test "It should configure innodb_log_file_size" {
