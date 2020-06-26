@@ -8,10 +8,13 @@ MASTER_CONTAINER="mysql-master"
 MASTER_DATA_CONTAINER="${MASTER_CONTAINER}-data"
 SLAVE_CONTAINER="mysql-slave"
 SLAVE_DATA_CONTAINER="${SLAVE_CONTAINER}-data"
+CHAINED_SLAVE_CONTAINER="chained-mysql-slave"
+CHAINED_SLAVE_DATA_CONTAINER="${CHAINED_SLAVE_CONTAINER}-data"
 
 function cleanup {
   echo "Cleaning up"
-  docker rm -f "$MASTER_CONTAINER" "$MASTER_DATA_CONTAINER" "$SLAVE_CONTAINER" "$SLAVE_DATA_CONTAINER" || true
+  docker rm -f "$MASTER_CONTAINER" "$MASTER_DATA_CONTAINER" "$SLAVE_CONTAINER" "$SLAVE_DATA_CONTAINER" \
+               "$CHAINED_SLAVE_CONTAINER" "$CHAINED_SLAVE_DATA_CONTAINER" || true
 }
 
 trap cleanup EXIT
@@ -26,6 +29,7 @@ echo "Initializing data containers"
 
 docker create --name "$MASTER_DATA_CONTAINER" "$IMG"
 docker create --name "$SLAVE_DATA_CONTAINER" "$IMG"
+docker create --name "$CHAINED_SLAVE_DATA_CONTAINER" "$IMG"
 
 
 echo "Initializing replication master"
@@ -68,19 +72,43 @@ docker run -it --rm \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
   "$IMG" --initialize-from "$MASTER_USER_URL"   # Use the user URL, but --initialize-from will use root instead
 
+echo "No binlog files were written during --initalize-from"
+docker run -it --rm \
+  --volumes-from "$SLAVE_DATA_CONTAINER" \
+  --entrypoint bash  "$IMG" -c "[[ ! -f /var/db/mysql-bin.000001 ]]"
+
+# Run the slave database
 docker run -d --name "$SLAVE_CONTAINER" \
   -e "PORT=${SLAVE_PORT}" \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
   "$IMG"
 
-
 SLAVE_IP="$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' "$SLAVE_CONTAINER")"
 SLAVE_ROOT_URL="mysql://root:$PASSPHRASE@$SLAVE_IP:$SLAVE_PORT/$DATABASE"
 SLAVE_USER_URL="mysql://$USER:$PASSPHRASE@$SLAVE_IP:$SLAVE_PORT/$DATABASE"
 
-
 until docker exec -it "$SLAVE_CONTAINER" mysqladmin ping; do sleep 0.1; done
 docker run -it --rm "$IMG" --client "$SLAVE_ROOT_URL" -e "SHOW SLAVE STATUS \G"
+
+echo "Initializing chained replication slave"
+CHAINED_SLAVE_PORT=33063
+
+docker run -it --rm \
+  --volumes-from "$CHAINED_SLAVE_DATA_CONTAINER" \
+  "$IMG" --initialize-from "$SLAVE_USER_URL"   # Use the user URL, but --initialize-from will use root instead
+
+docker run -d --name "$CHAINED_SLAVE_CONTAINER" \
+  -e "PORT=${CHAINED_SLAVE_PORT}" \
+  --volumes-from "$CHAINED_SLAVE_DATA_CONTAINER" \
+  "$IMG"
+
+CHAINED_SLAVE_IP="$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' "$CHAINED_SLAVE_CONTAINER")"
+CHAINED_SLAVE_ROOT_URL="mysql://root:$PASSPHRASE@$CHAINED_SLAVE_IP:$CHAINED_SLAVE_PORT/$DATABASE"
+CHAINED_SLAVE_USER_URL="mysql://$USER:$PASSPHRASE@$CHAINED_SLAVE_IP:$CHAINED_SLAVE_PORT/$DATABASE"
+
+
+until docker exec -it "$CHAINED_SLAVE_CONTAINER" mysqladmin ping; do sleep 0.1; done
+docker run -it --rm "$IMG" --client "$CHAINED_SLAVE_ROOT_URL" -e "SHOW SLAVE STATUS \G"
 
 
 # Create a test table now that replication has started
@@ -89,8 +117,21 @@ docker run -it --rm "$IMG" --client "$MASTER_USER_URL" -e "INSERT INTO test_afte
 
 # Give replication time it needs to catch up (should usually be essentially instantaneous, but who knows,
 # some CI systems might run slower.
-until docker run --rm "$IMG" --client "$SLAVE_ROOT_URL" -e "SHOW SLAVE STATUS \G" | grep "Waiting for master to send event"; do sleep 0.1; done
+until docker run --rm "$IMG" --client "$CHAINED_SLAVE_ROOT_URL" -e "SHOW SLAVE STATUS \G" | grep "Waiting for master to send event"; do sleep 0.1; done
 
 # Check that data is present in both tables
-docker run -it --rm "$IMG" --client "$SLAVE_USER_URL" -e 'SELECT * FROM test_before;' | grep 'TEST DATA BEFORE'
-docker run -it --rm "$IMG" --client "$SLAVE_USER_URL" -e 'SELECT * FROM test_after;' | grep 'TEST DATA AFTER'
+docker run -it --rm "$IMG" --client "$CHAINED_SLAVE_USER_URL" -e 'SELECT * FROM test_before;' | grep 'TEST DATA BEFORE'
+docker run -it --rm "$IMG" --client "$CHAINED_SLAVE_USER_URL" -e 'SELECT * FROM test_after;' | grep 'TEST DATA AFTER'
+
+# Confirm binlog files should be named "mysql-bin.NNNNNN"
+docker exec -it "$CHAINED_SLAVE_CONTAINER" grep "log-bin = mysql-bin" "/etc/mysql/conf.d/00-replication.cnf"
+
+# Ensure those binlog files are generated in normal operation,
+# since we temporarily disabled them during --initialize-from
+# This is probably redundant, given this must be the case
+# for chained replication to work, and that's also tested
+
+# Confirm binlog files should be named "mysql-bin.NNNNNN"
+docker exec -it "$CHAINED_SLAVE_CONTAINER" grep "log-bin = mysql-bin" "/etc/mysql/conf.d/00-replication.cnf"
+# Make sure one exists
+docker exec -it "$CHAINED_SLAVE_CONTAINER" bash -c "[[ -f /var/db/mysql-bin.000001 ]]"
