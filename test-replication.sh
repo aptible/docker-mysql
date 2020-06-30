@@ -41,7 +41,7 @@ docker run -it --rm \
   --volumes-from "$MASTER_DATA_CONTAINER" \
   "$IMG" --initialize
 
-docker run -d --name="$MASTER_CONTAINER" \
+docker run --rm -d --name="$MASTER_CONTAINER" \
   -e "PORT=${MASTER_PORT}" \
   --volumes-from "$MASTER_DATA_CONTAINER" \
   "$IMG"
@@ -72,13 +72,21 @@ docker run -it --rm \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
   "$IMG" --initialize-from "$MASTER_USER_URL"   # Use the user URL, but --initialize-from will use root instead
 
-echo "No binlog files were written during --initalize-from"
-docker run -it --rm \
+echo "No binlog file on the replica contains statemnts loaded from the dump"
+# MySQL 5.6 / 5.7 compatibility
+if [[ "$MYSQL_VERSION" = "5.6" ]]; then
+  BINGLOG_INDEX="000003"
+else
+  BINGLOG_INDEX="000002"
+fi
+
+(! docker run -it --rm \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
-  --entrypoint bash  "$IMG" -c "[[ ! -f /var/db/mysql-bin.000001 ]]"
+  --entrypoint mysqlbinlog "$IMG" "/var/db/mysql-bin.${BINGLOG_INDEX}" \
+  | grep 'CREATE TABLE `test_before`' )
 
 # Run the slave database
-docker run -d --name "$SLAVE_CONTAINER" \
+docker run --rm -d --name "$SLAVE_CONTAINER" \
   -e "PORT=${SLAVE_PORT}" \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
   "$IMG"
@@ -97,7 +105,7 @@ docker run -it --rm \
   --volumes-from "$CHAINED_SLAVE_DATA_CONTAINER" \
   "$IMG" --initialize-from "$SLAVE_USER_URL"   # Use the user URL, but --initialize-from will use root instead
 
-docker run -d --name "$CHAINED_SLAVE_CONTAINER" \
+docker run --rm -d --name "$CHAINED_SLAVE_CONTAINER" \
   -e "PORT=${CHAINED_SLAVE_PORT}" \
   --volumes-from "$CHAINED_SLAVE_DATA_CONTAINER" \
   "$IMG"
@@ -125,13 +133,3 @@ docker run -it --rm "$IMG" --client "$CHAINED_SLAVE_USER_URL" -e 'SELECT * FROM 
 
 # Confirm binlog files should be named "mysql-bin.NNNNNN"
 docker exec -it "$CHAINED_SLAVE_CONTAINER" grep "log-bin = mysql-bin" "/etc/mysql/conf.d/00-replication.cnf"
-
-# Ensure those binlog files are generated in normal operation,
-# since we temporarily disabled them during --initialize-from
-# This is probably redundant, given this must be the case
-# for chained replication to work, and that's also tested
-
-# Confirm binlog files should be named "mysql-bin.NNNNNN"
-docker exec -it "$CHAINED_SLAVE_CONTAINER" grep "log-bin = mysql-bin" "/etc/mysql/conf.d/00-replication.cnf"
-# Make sure one exists
-docker exec -it "$CHAINED_SLAVE_CONTAINER" bash -c "[[ -f /var/db/mysql-bin.000001 ]]"

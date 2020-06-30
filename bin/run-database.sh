@@ -291,16 +291,6 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
-
-  # Prevent writing changes to binlog during loading from dump, to avoid requiring more
-  # disk space on the replica than the exact data set we're loading.
-
-  # This is a little hacky, but the --disable-log-bin option for `mysqld` only exists for
-  # 8.0+, so we need to either set the session varible while loading data, or just
-  # change the replication configuration file (here during --initialize-from only).
-
-  sed -i '/^log-bin =/d' /etc/mysql/conf.d/replication.cnf.template
-
   mysql_initialize_innodb_log_file_size
 
   mysql_initialize_certs
@@ -330,11 +320,15 @@ elif [[ "$1" == "--initialize-from" ]]; then
     MASTER_SSL_CIPHER = '${SSL_CIPHERS}';"
 
   # Load initial data and log position
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    mysql --flush-privileges |  mysql mysql
+  MYSQL_PWD="$password" \
+    mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" \
+    --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
+    mysql --flush-privileges | mysql mysql
   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    --master-data --all-databases --single-transaction | mysql
+  ( echo "SET SESSION SQL_LOG_BIN=0;"; MYSQL_PWD="$password" \
+    mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" \
+    --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
+    --master-data --all-databases --single-transaction )| mysql
 
   mysql_shutdown
 
