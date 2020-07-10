@@ -72,7 +72,7 @@ docker run -it --rm \
   --volumes-from "$SLAVE_DATA_CONTAINER" \
   "$IMG" --initialize-from "$MASTER_USER_URL"   # Use the user URL, but --initialize-from will use root instead
 
-echo "No binlog file on the replica contains statemnts loaded from the dump"
+echo "No binlog file on the replica contains statements loaded from the dump"
 # MySQL 5.6 / 5.7 compatibility
 if [[ "$MYSQL_VERSION" = "5.6" ]]; then
   BINGLOG_INDEX="000003"
