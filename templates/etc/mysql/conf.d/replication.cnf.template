@@ -13,9 +13,6 @@ log-bin = mysql-bin
 # hurt to have the option here.
 relay-log = mysql-relay
 
-# Ensure chained replication works
-log-slave-updates = on
-
 # Ensure the binlog data is consistent on disk. If we run out of space or crash
 # uncleanly, this will be helpful. Naturally, this will impact performance, but
 # it's the price we pay for not losing data, and it's actually the default as
