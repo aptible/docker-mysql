@@ -288,9 +288,6 @@ elif [[ "$1" == "--initialize-from" ]]; then
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' $grant_ssl;
   "
 
-  PRIVILEGES_DUMPFILE="${DATA_DIRECTORY}/master.dump"
-  DATA_DUMPFILE="${DATA_DIRECTORY}/db.dump"
-
   # Create slave configuration
   echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
@@ -304,23 +301,6 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # Now, retrieve data from the master
   # Note that this will fail if binary logging is not enabled on the master (because we use --master-data, which
   # is expected to include the binary log position), which is good.
-
-  # TODO - Do we want to enable --single-transaction? This would be preferable because right now
-  # we'll acquire locks that will slow down any currently running application (which is bad).
-  # If we use --single-transaction, that won't be the case, but:
-  # - It only works properly with InnoDB tables, but MySQL won't enforce it.
-  # - There can't be any data definition operations (e.g. ALTER TABLE happening at the same time), but
-  #   MySQL won't enforce it.
-
-  # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    mysql --flush-privileges \
-    > "${PRIVILEGES_DUMPFILE}"
-
-   # shellcheck disable=SC2154
-  MYSQL_PWD="$password" mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    --master-data --all-databases \
-    > "${DATA_DUMPFILE}"
 
   # Launch MySQL, load the data in, then start the slave.
   # The slave will restart automatically next time MySQL starts up.
@@ -340,13 +320,17 @@ elif [[ "$1" == "--initialize-from" ]]; then
     MASTER_SSL_CIPHER = '${SSL_CIPHERS}';"
 
   # Load initial data and log position
-  mysql mysql < "${PRIVILEGES_DUMPFILE}"
-  mysql < "${DATA_DUMPFILE}"
+  MYSQL_PWD="$password" \
+    mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" \
+    --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
+    mysql --flush-privileges | mysql mysql
+  # shellcheck disable=SC2154
+  ( echo "SET SESSION SQL_LOG_BIN=0;"; MYSQL_PWD="$password" \
+    mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" \
+    --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
+    --master-data --all-databases --single-transaction )| mysql
 
   mysql_shutdown
-
-  # Cleanup
-  rm "${PRIVILEGES_DUMPFILE}" "${DATA_DUMPFILE}"
 
 elif [[ "$1" == "--client" ]]; then
   [ -z "$2" ] && echo "docker run -it aptible/mysql --client mysql://..." && exit
