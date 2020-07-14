@@ -247,7 +247,7 @@ if [[ "$1" == "--initialize" ]]; then
 elif [[ "$1" == "--initialize-from" ]]; then
   [ -z "$2" ] && echo "docker run -it aptible/mysql --initialize-from mysql://..." && exit 1
 
-  # First, generate a new server ID for this replics unless one is provided. We'll use it for the username, too.
+  # First, generate a new server ID for this replica unless one is provided. We'll use it for the username, too.
   # In MySQL < 5.7, usernames must be <= 16 chars, and replication password must be < 32 chars.
 
   # shellcheck disable=SC2086
