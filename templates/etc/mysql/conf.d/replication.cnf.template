@@ -9,7 +9,7 @@ max-binlog-size = 100M
 # Binary logging is enabled on all nodes to allow promotion.
 log-bin = mysql-bin
 
-# Relay logging is only going to be used by slaves, but it doesn't
+# Relay logging is only going to be used by replicas, but it doesn't
 # hurt to have the option here.
 relay-log = mysql-relay
 

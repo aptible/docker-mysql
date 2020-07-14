@@ -204,7 +204,7 @@ function mysql_initialize_innodb_log_file_size() {
 
 
 if [[ "$1" == "--initialize" ]]; then
-  # We're initializing a master; use server-id = 1.
+  # We're initializing a primary database; use server-id = 1.
   mkdir -p "$(dirname "${DATA_DIRECTORY}/${SERVER_ID_FILE}")"
   echo 1 > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
   mysql_initialize_innodb_log_file_size
@@ -247,13 +247,13 @@ if [[ "$1" == "--initialize" ]]; then
 elif [[ "$1" == "--initialize-from" ]]; then
   [ -z "$2" ] && echo "docker run -it aptible/mysql --initialize-from mysql://..." && exit 1
 
-  # First, generate a new server ID for this slave unless one is provided. We'll use it for the username, too.
+  # First, generate a new server ID for this replica unless one is provided. We'll use it for the username, too.
   # In MySQL < 5.7, usernames must be <= 16 chars, and replication password must be < 32 chars.
 
   # shellcheck disable=SC2086
   {
-    : ${MYSQL_REPLICATION_SLAVE_SERVER_ID:="$(randint_32)"}
-    : ${MYSQL_REPLICATION_USERNAME:="repl-$MYSQL_REPLICATION_SLAVE_SERVER_ID"}
+    : ${MYSQL_REPLICATION_REPLICA_SERVER_ID:="$(randint_32)"}
+    : ${MYSQL_REPLICATION_USERNAME:="repl-$MYSQL_REPLICATION_REPLICA_SERVER_ID"}
     : ${MYSQL_REPLICATION_PASSPHRASE:="$(random_chars 16)"}
     : ${MYSQL_REPLICATION_HOST:="%"}
     : ${MYSQL_REPLICATION_ROOT:="root"}  # By default, ignore user from URL and use root to reconfigure existing MySQL
@@ -266,12 +266,12 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # CREATE USER will fail if the user already exists, which we want here.
   # We could retry, but the probability that we'll use twice the same ID
-  # with 2**32 choices is pretty low (< 1% even if we spin up 9000 slaves).
+  # with 2**32 choices is pretty low (< 1% even if we spin up 9000 replicas).
 
   # In MySQL 8, REQUIRE SSL neds to be provided on CREATE USER, but in MySQL <
   # 8, it needs to be provided in GRANT. Depending on our version, we do one or
   # the other. This assumes our MySQL version and the primary's are the same,
-  # which is how we normally initialize slaves.
+  # which is how we normally initialize replicas.
 
   create_user_ssl="REQUIRE SSL"
   grant_ssl=""
@@ -288,8 +288,8 @@ elif [[ "$1" == "--initialize-from" ]]; then
     GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USERNAME'@'$MYSQL_REPLICATION_HOST' $grant_ssl;
   "
 
-  # Create slave configuration
-  echo "$MYSQL_REPLICATION_SLAVE_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
+  # Create replica configuration
+  echo "$MYSQL_REPLICATION_REPLICA_SERVER_ID" > "${DATA_DIRECTORY}/${SERVER_ID_FILE}"
 
   mysql_initialize_innodb_log_file_size
 
@@ -298,17 +298,17 @@ elif [[ "$1" == "--initialize-from" ]]; then
   mysql_initialize_log_dir
   mysql_initialize_data_dir
 
-  # Now, retrieve data from the master
-  # Note that this will fail if binary logging is not enabled on the master (because we use --master-data, which
+  # Now, retrieve data from the source
+  # Note that this will fail if binary logging is not enabled on the source (because we use --master-data, which
   # is expected to include the binary log position), which is good.
 
-  # Launch MySQL, load the data in, then start the slave.
-  # The slave will restart automatically next time MySQL starts up.
+  # Launch MySQL, load the data in, then start the replica.
+  # The replica will restart automatically next time MySQL starts up.
 
   mysql_start_background
 
   # Change MASTER_PORT *must* be run before loading the dump, otherwise MySQL
-  # will assume the master has changed and reset the positions set by the dump...
+  # will assume the source has changed and reset the positions set by the dump...
   # http://dev.mysql.com/doc/refman/5.6/en/change-master-to.html
   # shellcheck disable=SC2154
   mysql -e "CHANGE MASTER TO
