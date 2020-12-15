@@ -89,11 +89,13 @@ function mysql_initialize_certs () {
   mkdir -p "$SSL_DIRECTORY"
   pushd "$SSL_DIRECTORY"
 
+  local ca_cert_file="ca-cert.pem"
   local ssl_cert_file="server-cert.pem"
   local ssl_key_file="server-key.pem"
 
-  if [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
+  if [ -n "$SSL_CA_CERTIFICATE" ] && [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
     echo "Certs present in environment - using them"
+    echo "$SSL_CA_CERTIFICATE" > "$ca_cert_file"
     echo "$SSL_CERTIFICATE" > "$ssl_cert_file"
     echo "$SSL_KEY" > "$ssl_key_file"
   else
@@ -101,9 +103,9 @@ function mysql_initialize_certs () {
     # Otherwise, MySQL can reject the configuration with an error indicating that
     # it thinks their start dates are in the future.
     faketime 'yesterday' openssl genrsa 2048 > ca-key.pem
-    faketime 'yesterday' openssl req -sha1 -new -x509 -nodes -days 10000 -key ca-key.pem -batch > ca-cert.pem
+    faketime 'yesterday' openssl req -sha1 -new -x509 -nodes -days 10000 -key ca-key.pem -batch > "$ca_cert_file"
     faketime 'yesterday' openssl req -sha1 -newkey rsa:2048 -days 10000 -nodes -keyout server-key-pkcs-8.pem -batch  > server-req.pem
-    faketime 'yesterday' openssl x509 -sha1 -req -in server-req.pem -days 10000  -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 > "$ssl_cert_file"
+    faketime 'yesterday' openssl x509 -sha1 -req -in server-req.pem -days 10000  -CA "$ca_cert_file" -CAkey ca-key.pem -set_serial 01 > "$ssl_cert_file"
 
     # MySQL requires the key to be PKCS #1-formatted; modern versions of OpenSSL
     # will generate a key in PKCS #8 format. This call ensures that the key is in
