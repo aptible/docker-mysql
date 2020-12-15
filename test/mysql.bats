@@ -62,7 +62,7 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
   popd
 
   stop_mysql
-  SSL_CA_CERTIFICATE="$(cat "${ssl_temp_directory}/${ca_cert_file}")" \
+  CA_CERTIFICATE="$(cat "${ssl_temp_directory}/${ca_cert_file}")" \
   SSL_CERTIFICATE="$(cat "${ssl_temp_directory}/${ssl_cert_file}")" \
   SSL_KEY="$(cat "${ssl_temp_directory}/${ssl_key_file}")" \
   start_mysql

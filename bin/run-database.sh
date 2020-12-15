@@ -93,9 +93,9 @@ function mysql_initialize_certs () {
   local ssl_cert_file="server-cert.pem"
   local ssl_key_file="server-key.pem"
 
-  if [ -n "$SSL_CA_CERTIFICATE" ] && [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
+  if [ -n "$CA_CERTIFICATE" ] && [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
     echo "Certs present in environment - using them"
-    echo "$SSL_CA_CERTIFICATE" > "$ca_cert_file"
+    echo "$CA_CERTIFICATE" > "$ca_cert_file"
     echo "$SSL_CERTIFICATE" > "$ssl_cert_file"
     echo "$SSL_KEY" > "$ssl_key_file"
   else
