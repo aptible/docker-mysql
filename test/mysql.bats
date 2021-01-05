@@ -48,23 +48,29 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
   ssl_temp_directory=$(mktemp -d)
   pushd "$ssl_temp_directory"
 
+  local ca_cert_file="ca-cert.pem"
   local ssl_cert_file="server-cert.pem"
   local ssl_key_file="server-key.pem"
 
   faketime 'yesterday' openssl genrsa 2048 > ca-key.pem
-  faketime 'yesterday' openssl req -sha1 -new -x509 -nodes -days 10000 -key ca-key.pem -batch > ca-cert.pem
+  faketime 'yesterday' openssl req -sha1 -new -x509 -nodes -days 10000 -key ca-key.pem -batch > "$ca_cert_file"
   faketime 'yesterday' openssl req -sha1 -newkey rsa:2048 -days 10000 -nodes -keyout server-key-pkcs-8.pem -batch  > server-req.pem
-  faketime 'yesterday' openssl x509 -sha1 -req -in server-req.pem -days 10000  -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 > "$ssl_cert_file"
+  faketime 'yesterday' openssl x509 -sha1 -req -in server-req.pem -days 10000  -CA "$ca_cert_file" -CAkey ca-key.pem -set_serial 01 > "$ssl_cert_file"
 
   openssl rsa -in server-key-pkcs-8.pem -out "$ssl_key_file"
 
   popd
 
   stop_mysql
+  CA_CERTIFICATE="$(cat "${ssl_temp_directory}/${ca_cert_file}")" \
   SSL_CERTIFICATE="$(cat "${ssl_temp_directory}/${ssl_cert_file}")" \
   SSL_KEY="$(cat "${ssl_temp_directory}/${ssl_key_file}")" \
   start_mysql
 
+  have_ssl=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show variables where variable_name = 'have_ssl'" | grep Value | awk '{ print $2 }')
+  [[ "$have_ssl" == "YES" ]]
+
+  [[ -z "$(diff "${SSL_DIRECTORY}/${ca_cert_file}" "${ssl_temp_directory}/${ca_cert_file}")" ]]
   [[ -z "$(diff "${SSL_DIRECTORY}/${ssl_cert_file}" "${ssl_temp_directory}/${ssl_cert_file}")" ]]
   [[ -z "$(diff "${SSL_DIRECTORY}/${ssl_key_file}" "${ssl_temp_directory}/${ssl_key_file}")" ]]
 }
