@@ -66,7 +66,10 @@ function mysql_initialize_conf_dir () {
     > "${CONF_DIRECTORY}/conf.d/01-${override_file}"
 
   # Auto-tune (takes precedence on overrides)
-  /usr/local/bin/autotune > "${CONF_DIRECTORY}/conf.d/10-autotune.cnf"
+  autotune_file="${CONF_DIRECTORY}/conf.d/10-autotune.cnf"
+  /usr/local/bin/autotune > "$autotune_file"
+  echo "Autotune chosen settings:"
+  cat "$autotune_file"
 
   # Read an optional config file from the persistent volume (taks precedence over all)
   persist_file="persist.cnf"
