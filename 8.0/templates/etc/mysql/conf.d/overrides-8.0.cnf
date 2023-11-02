@@ -2,3 +2,4 @@
 myisam-recover-options = BACKUP
 lc-messages-dir = /usr/share/mysql-8.0
 sql_mode = ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+binlog-expire-logs-seconds = 864000
