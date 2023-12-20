@@ -330,7 +330,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   ( echo "SET SESSION SQL_LOG_BIN=0;"; MYSQL_PWD="$password" \
     mysqldump --host "$host" --port "${port:-$DEFAULT_PORT}" --user "$MYSQL_REPLICATION_ROOT" \
     --ssl-mode=REQUIRED --ssl-cipher="${SSL_CIPHERS}" \
-    --master-data --all-databases --single-transaction )| mysql
+    --master-data --all-databases --routines --events --single-transaction )| mysql
 
   mysql_shutdown
 
