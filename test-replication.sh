@@ -80,10 +80,10 @@ else
   BINGLOG_INDEX="000002"
 fi
 
-(! docker run -it --rm \
+docker run -it --rm \
   --volumes-from "$REPLICA_DATA_CONTAINER" \
   --entrypoint mysqlbinlog "$IMG" "/var/db/mysql-bin.${BINGLOG_INDEX}" \
-  | grep 'CREATE TABLE `test_before`' )
+  | grep -qvi 'CREATE TABLE `test_before`'
 
 # Run the replica database
 docker run --rm -d --name "$REPLICA_CONTAINER" \
