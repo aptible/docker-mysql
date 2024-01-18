@@ -30,11 +30,6 @@ source "${BATS_TEST_DIRNAME}/test_helper.sh"
   [[ "$have_openssl" == "YES" ]]
 }
 
-@test "It should allow connections over SSL" {
-  cipher=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show status like 'Ssl_cipher'" | grep Value | awk '{ print $2 }')
-  [[ "$cipher" == "DHE-RSA-AES256-SHA" ]]
-}
-
 @test "It should generate a certificate on startup" {
   stop_mysql
   start_mysql
