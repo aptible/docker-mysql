@@ -80,10 +80,10 @@ else
   BINGLOG_INDEX="000002"
 fi
 
-(! docker run -it --rm \
+docker run -it --rm \
   --volumes-from "$REPLICA_DATA_CONTAINER" \
   --entrypoint mysqlbinlog "$IMG" "/var/db/mysql-bin.${BINGLOG_INDEX}" \
-  | grep 'CREATE TABLE `test_before`' )
+  | grep -qvi 'CREATE TABLE `test_before`' 
 
 # Run the replica database
 docker run --rm -d --name "$REPLICA_CONTAINER" \
@@ -96,7 +96,7 @@ REPLICA_ROOT_URL="mysql://root:$PASSPHRASE@$REPLICA_IP:$REPLICA_PORT/$DATABASE"
 REPLICA_USER_URL="mysql://$USER:$PASSPHRASE@$REPLICA_IP:$REPLICA_PORT/$DATABASE"
 
 until docker exec -it "$REPLICA_CONTAINER" mysqladmin ping; do sleep 0.1; done
-docker run -it --rm "$IMG" --client "$REPLICA_ROOT_URL" -e "SHOW SLAVE STATUS \G"
+docker run -it --rm "$IMG" --client "$REPLICA_ROOT_URL" -e "SHOW REPLICA STATUS \G"
 
 echo "Initializing chained replication replica"
 CHAINED_REPLICA_PORT=33063
@@ -116,7 +116,7 @@ CHAINED_REPLICA_USER_URL="mysql://$USER:$PASSPHRASE@$CHAINED_REPLICA_IP:$CHAINED
 
 
 until docker exec -it "$CHAINED_REPLICA_CONTAINER" mysqladmin ping; do sleep 0.1; done
-docker run -it --rm "$IMG" --client "$CHAINED_REPLICA_ROOT_URL" -e "SHOW SLAVE STATUS \G"
+docker run -it --rm "$IMG" --client "$CHAINED_REPLICA_ROOT_URL" -e "SHOW REPLICA STATUS \G"
 
 
 # Create a test table now that replication has started
@@ -125,7 +125,7 @@ docker run -it --rm "$IMG" --client "$SOURCE_USER_URL" -e "INSERT INTO test_afte
 
 # Give replication time it needs to catch up (should usually be essentially instantaneous, but who knows,
 # some CI systems might run slower.
-until docker run --rm "$IMG" --client "$CHAINED_REPLICA_ROOT_URL" -e "SHOW SLAVE STATUS \G" | grep "Waiting for master to send event"; do sleep 0.1; done
+until docker run --rm "$IMG" --client "$CHAINED_REPLICA_ROOT_URL" -e "SHOW REPLICA STATUS \G" | grep "Waiting for source to send event"; do sleep 0.1; done
 
 # Check that data is present in both tables
 docker run -it --rm "$IMG" --client "$CHAINED_REPLICA_USER_URL" -e 'SELECT * FROM test_before;' | grep 'TEST DATA BEFORE'

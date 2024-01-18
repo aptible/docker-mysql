@@ -27,3 +27,8 @@ get_session_protocol() {
   tls_version="$(get_session_protocol --tls-version=TLSv1.2)"
   [[ "$tls_version" == "TLSv1.2" ]]
 }
+
+@test "It should allow connections over SSL" {
+  cipher=$(run-database.sh --client "mysql://root@localhost/db" -Ee "show status like 'Ssl_cipher'" | grep Value | awk '{ print $2 }')
+  [[ "$cipher" == "DHE-RSA-AES256-SHA256" ]]
+}

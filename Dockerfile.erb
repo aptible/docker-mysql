@@ -1,4 +1,4 @@
-FROM quay.io/aptible/debian:stretch
+FROM --platform=linux/amd64 quay.io/aptible/debian:<%= ENV.fetch 'DEBIAN_VERSION' %>
 
 # cf. docker-library/mysql: explicitly create the user so uid and gid are consistent.
 RUN groupadd -r mysql && useradd -r -g mysql mysql
